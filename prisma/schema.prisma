@@ -1,0 +1,83 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  MANAGER
+  SUPERVISOR
+  WORKER
+}
+
+enum ShiftStatus {
+  ACTIVE
+  COMPLETED
+}
+
+model User {
+  id         Int        @id @default(autoincrement())
+  email      String     @unique
+  name       String
+  password   String
+  role       Role       @default(WORKER)
+  createdAt  DateTime   @default(now())
+  shifts     Shift[]
+  logs       Log[]
+  handoversFrom Handover[] @relation("HandoverFrom")
+  handoversTo   Handover[] @relation("HandoverTo")
+}
+
+model Shift {
+  id         Int        @id @default(autoincrement())
+  startTime  DateTime   @default(now())
+  endTime    DateTime?
+  status     ShiftStatus @default(ACTIVE)
+  userId     Int
+  user       User       @relation(fields: [userId], references: [id])
+  logs       Log[]
+  handovers  Handover[]
+  reports    Report[]
+  createdAt  DateTime   @default(now())
+}
+
+model Handover {
+  id          Int      @id @default(autoincrement())
+  shiftId     Int
+  shift       Shift    @relation(fields: [shiftId], references: [id])
+  fromUserId  Int
+  fromUser    User     @relation("HandoverFrom", fields: [fromUserId], references: [id])
+  toUserId    Int
+  toUser      User     @relation("HandoverTo", fields: [toUserId], references: [id])
+  notes       String
+  createdAt   DateTime @default(now())
+}
+
+model Log {
+  id          Int      @id @default(autoincrement())
+  shiftId     Int
+  shift       Shift    @relation(fields: [shiftId], references: [id])
+  userId      Int
+  user        User     @relation(fields: [userId], references: [id])
+  category    String
+  description String
+  createdAt   DateTime @default(now())
+}
+
+model Report {
+  id          Int      @id @default(autoincrement())
+  shiftId     Int
+  shift       Shift    @relation(fields: [shiftId], references: [id])
+  summary     String
+  generatedAt DateTime @default(now())
+}
