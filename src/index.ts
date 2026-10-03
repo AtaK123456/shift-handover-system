@@ -1,3 +1,6 @@
+import { authenticateToken } from "./middleware/auth";
+import { startShift } from "./services/shift.service";
+import jwt from "jsonwebtoken";
 import "dotenv/config";
 import { PrismaClient } from './generated/prisma/client';
 import express from "express";
@@ -52,7 +55,23 @@ app.post('/login', async (req, res) => {
     return res.status(401).json({ error: "Email veya şifre hatalı" });
   }
 
-  res.json({ id: user.id, email: user.email, name: user.name });
+  const token = jwt.sign(
+  { id: user.id, email: user.email, role: user.role },
+  process.env.JWT_SECRET!,
+  { expiresIn: "8h" }
+);
+
+res.json({ token, user: { id: user.id, email: user.email, name: user.name } });
 });
 
 app.listen(3000, () => { console.log("Server is running on port 3000"); });
+
+
+app.post('/shifts/start', authenticateToken, async (req, res) => {
+  try {
+    const shift = await startShift(req.user!.id);
+    res.json(shift);
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
