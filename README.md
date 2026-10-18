@@ -147,3 +147,12 @@ npm run test:e2e
 Testler kendi yerel sunucusunu başlatır ve durdurur; 3000 portu boş olmalıdır.
 Giriş/kayıt, vardiya başlatma/bitirme, filtreleme, gerçek Excel indirmesi,
 yönetici görünümü, mobil taşma ve çıkış akışları kontrol edilir.
+
+### Açık / koyu tema
+
+Giriş/kayıt ekranındaki ve panelin üst kısmındaki **Koyu mod / Açık mod** düğmesi
+ile görünümü değiştirebilirsiniz. İlk açılışta cihazınızın tema tercihi kullanılır.
+Elle seçilen tema yalnızca `vardiya-theme` anahtarıyla tarayıcıda saklanır;
+sayfa yenilenince, ekran değiştirince ve çıkış yapınca korunur. Şifre ve token
+bu tercihle birlikte kaydedilmez. Tarayıcı depolaması kapalıysa tema o sayfada
+çalışmaya devam eder; sonraki açılışta cihaz tercihi kullanılır.

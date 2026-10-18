@@ -9,3 +9,38 @@ td{font-size:13px}th{font-size:11px}.date-cell small{font-size:11px;color:#71806
 @media(max-width:600px){.scroll-hint{display:block;font-size:10px;color:#68765f;padding:0 18px 14px}.history-heading p{font-size:11px}}
 
 .password-field{position:relative}.password-field input{padding-right:82px}.password-toggle{position:absolute;right:7px;top:50%;transform:translateY(-50%);min-width:64px;min-height:34px;padding:6px 10px;border:0;border-radius:5px;background:transparent;color:#24684b;font:inherit;font-size:12px;font-weight:650}.password-toggle:hover{background:#edf3ed}
+
+/* Theme controls are shared by authentication and the dashboard. */
+.auth-main{position:relative}.auth-theme{position:absolute;right:28px;top:22px}.theme-toggle{font-size:12px;min-height:36px;padding:8px 12px}.account-area .theme-toggle{margin-left:0;border:1px solid var(--line);border-radius:8px;padding:7px 10px}
+:root[data-theme="dark"]{color-scheme:dark;color:#e0ebe3;background:#111c19;--green:#a4d4bb;--muted:#a2b4a8;--line:#34463c}
+:root[data-theme="dark"] .auth-story{background:#102f27}
+:root[data-theme="dark"] .auth-card>.eyebrow,:root[data-theme="dark"] .welcome .eyebrow{color:#a1bd96}
+:root[data-theme="dark"] .muted,:root[data-theme="dark"] .hint,:root[data-theme="dark"] .switch-auth{color:#a5b7ab}
+:root[data-theme="dark"] input,:root[data-theme="dark"] select{color:#e0ebe3;background:#172720;border-color:#506457}
+:root[data-theme="dark"] input::placeholder{color:#96a99c}
+:root[data-theme="dark"] .primary{background:#a4d4bb;color:#153b2d}
+:root[data-theme="dark"] .primary:hover{background:#bce7d0}
+:root[data-theme="dark"] .text-button,:root[data-theme="dark"] .password-toggle{color:#b3dfc0}
+:root[data-theme="dark"] .password-toggle:hover{background:#2b4435}
+:root[data-theme="dark"] .topbar,:root[data-theme="dark"] .history-card,:root[data-theme="dark"] .today{background:#1b2b23}
+:root[data-theme="dark"] .brand small,:root[data-theme="dark"] .account-details small{color:#a2b4a0}
+:root[data-theme="dark"] .quiet,:root[data-theme="dark"] .today{color:#bacdbb}
+:root[data-theme="dark"] .quiet:hover{background:#2b3f31}
+:root[data-theme="dark"] .avatar,:root[data-theme="dark"] .count,:root[data-theme="dark"] .empty-icon{background:#304630;color:#c3d8b7}
+:root[data-theme="dark"] .outline{background:#203a2c;border-color:#4a6a50;color:#c3e7ce}
+:root[data-theme="dark"] .outline:hover,:root[data-theme="dark"] .secondary:hover{background:#3b5640}
+:root[data-theme="dark"] .secondary{background:#304a36;color:#d2e5c8}
+:root[data-theme="dark"] .filters label,:root[data-theme="dark"] .filter-note,:root[data-theme="dark"] .scroll-hint,:root[data-theme="dark"] .table-footer,:root[data-theme="dark"] .workspace-footer{color:#a8bba1}
+:root[data-theme="dark"] th{background:#25372a;color:#c0ceaf;border-color:#34463c}
+:root[data-theme="dark"] td{color:#c5d3bf;border-color:#34463c}
+:root[data-theme="dark"] td:first-child{color:#d9e5d0}
+:root[data-theme="dark"] .date-cell small{color:#a2b298}
+:root[data-theme="dark"] .status{background:#34452e;color:#d0dfbb}
+:root[data-theme="dark"] .status.active{background:#24452c;color:#b4dfa4}
+:root[data-theme="dark"] .table-footer,:root[data-theme="dark"] .empty-state{border-color:#34463c}
+:root[data-theme="dark"] .empty-state{color:#adbea4}
+:root[data-theme="dark"] .empty-state h3{color:#d1dfc4}
+:root[data-theme="dark"] .message{color:#b6dfc4}
+:root[data-theme="dark"] .message.error{color:#ffb6a5}
+@media(max-width:600px){.auth-main{padding-top:74px}.auth-theme{right:22px;top:18px}.account-area{gap:8px}.account-area .theme-toggle{font-size:10px;min-height:32px;padding:6px 8px}.account-area .button{white-space:nowrap}}
+@media(max-width:360px){.topbar-inner{flex-wrap:wrap}.account-area{margin-left:auto}}

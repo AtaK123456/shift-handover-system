@@ -6,6 +6,7 @@
   <meta name="theme-color" content="#133f3a">
   <meta name="description" content="Vardiyanı başlat, kayıtlarını takip et ve Excel olarak indir.">
   <title>Vardiya Defteri</title>
+  <script src="/app/theme.js"></script>
   <link rel="stylesheet" href="/app/styles.css">
   <script type="module" src="/app/app.js"></script>
 </head>
@@ -17,6 +18,7 @@
       <p class="story-footer">Günün akışını sadeleştir.</p>
     </div>
     <main class="auth-main">
+      <div class="auth-theme"><button type="button" class="button quiet theme-toggle" data-theme-toggle aria-label="Koyu moda geç" aria-pressed="false">Koyu mod</button></div>
       <div class="auth-card">
         <span class="eyebrow">VARDİYA TAKİBİ</span><h2 id="auth-title">Tekrar hoş geldin.</h2><p id="auth-description" class="muted">Vardiyalarını takip etmek için hesabına giriş yap.</p>
         <form id="login-form">
@@ -39,7 +41,7 @@
   <div id="dashboard" hidden>
     <header class="topbar"><div class="topbar-inner">
       <a class="brand" href="/app/" aria-label="Vardiya Defteri ana sayfa"><span class="brand-icon" aria-hidden="true">v.</span><span>Vardiya Defteri<small>VARDİYA VE KAYIT TAKİBİ</small></span></a>
-      <div class="account-area"><span class="avatar" id="avatar" aria-hidden="true"></span><div class="account-details"><strong id="account-name"></strong><small id="account-role"></small></div><button type="button" id="logout" class="button quiet">Çıkış yap</button></div>
+      <div class="account-area"><button type="button" class="button quiet theme-toggle" data-theme-toggle aria-label="Koyu moda geç" aria-pressed="false">Koyu mod</button><span class="avatar" id="avatar" aria-hidden="true"></span><div class="account-details"><strong id="account-name"></strong><small id="account-role"></small></div><button type="button" id="logout" class="button quiet">Çıkış yap</button></div>
     </div></header>
     <main class="workspace">
       <div class="welcome"><div><p class="eyebrow">ÇALIŞMA ALANIN</p><h1>Merhaba, <span id="greeting-name"></span>.</h1><p class="muted">Vardiyanı ve geçmiş kayıtlarını buradan yönet.</p></div><div class="today"><span class="date-dot" aria-hidden="true"></span><span id="today"></span></div></div>
