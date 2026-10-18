@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#133f3a">
+  <meta name="description" content="Vardiyanı başlat, kayıtlarını takip et ve Excel olarak indir.">
+  <title>Vardiya Defteri</title>
+  <link rel="stylesheet" href="/app/styles.css">
+  <script type="module" src="/app/app.js"></script>
+</head>
+<body>
+  <div id="auth-view" class="auth-layout">
+    <div class="auth-story">
+      <a class="brand" href="/app/" aria-label="Vardiya Defteri ana sayfa"><span class="brand-icon" aria-hidden="true">v.</span><span>Vardiya Defteri<small>HER VARDİYA, KAYIT ALTINDA.</small></span></a>
+      <div class="story-content"><span class="eyebrow">İŞİN BAŞINDA. HER ZAMAN.</span><h1>Düzenli vardiyalar.<br>Daha rahat bir gün.</h1><p>Vardiyanı tek dokunuşla başlat.<br>Geçmişine göz at, kayıtlarını kolayca paylaş.</p><div class="story-line"></div><span class="story-note">Başlat. Takip et. Kaydet.</span></div>
+      <p class="story-footer">Günün akışını sadeleştir.</p>
+    </div>
+    <main class="auth-main">
+      <div class="auth-card">
+        <span class="eyebrow">VARDİYA TAKİBİ</span><h2 id="auth-title">Tekrar hoş geldin.</h2><p id="auth-description" class="muted">Vardiyalarını takip etmek için hesabına giriş yap.</p>
+        <form id="login-form">
+          <div id="name-field" hidden><label for="name">Ad soyad</label><input id="name" name="name" autocomplete="name" maxlength="100" placeholder="Adın ve soyadın"></div>
+          <label for="email">E-posta adresi</label><input id="email" name="email" type="email" autocomplete="username" required maxlength="254" placeholder="ornek@sirket.com">
+          <label for="password">Şifre</label><input id="password" name="password" type="password" autocomplete="current-password" required placeholder="Şifreni gir">
+          <p id="password-hint" class="hint" hidden>En az 12 karakter kullan.</p>
+          <button type="submit" id="login-button" class="button primary full">Giriş yap <span aria-hidden="true">→</span></button>
+        </form>
+        <p class="switch-auth"><span id="switch-label">Henüz hesabın yok mu?</span> <button id="switch-auth" type="button" class="text-button">Hesap oluştur</button></p>
+        <p id="auth-message" class="message" role="status" aria-live="polite"></p>
+      </div>
+    </main>
+  </div>
+
+  <div id="dashboard" hidden>
+    <header class="topbar"><div class="topbar-inner">
+      <a class="brand" href="/app/" aria-label="Vardiya Defteri ana sayfa"><span class="brand-icon" aria-hidden="true">v.</span><span>Vardiya Defteri<small>VARDİYA VE KAYIT TAKİBİ</small></span></a>
+      <div class="account-area"><span class="avatar" id="avatar" aria-hidden="true"></span><div class="account-details"><strong id="account-name"></strong><small id="account-role"></small></div><button type="button" id="logout" class="button quiet">Çıkış yap</button></div>
+    </div></header>
+    <main class="workspace">
+      <div class="welcome"><div><p class="eyebrow">ÇALIŞMA ALANIN</p><h1>Merhaba, <span id="greeting-name"></span>.</h1><p class="muted">Vardiyanı ve geçmiş kayıtlarını buradan yönet.</p></div><div class="today"><span class="date-dot" aria-hidden="true"></span><span id="today"></span></div></div>
+      <section class="shift-card" aria-labelledby="shift-title">
+        <div class="shift-main"><div class="shift-heading"><span class="eyebrow">ŞU ANKİ DURUMUN</span><span class="live-badge" id="shift-badge">Yükleniyor</span></div><h2 id="shift-title">Vardiyan kontrol ediliyor…</h2><p id="shift-description">Birazdan hazır.</p><div class="shift-details" id="shift-details" hidden><div><span>BAŞLANGIÇ</span><strong id="current-start">—</strong></div><div><span>GEÇEN SÜRE</span><strong id="elapsed">—</strong></div></div></div>
+        <div class="shift-action"><button type="button" id="shift-button" class="button accent" disabled>Yükleniyor…</button><span id="shift-action-hint">Kayıtlar hesabınla ilişkilendirilir.</span></div>
+      </section>
+      <p id="dashboard-message" class="message dashboard-message" role="status" aria-live="polite"></p>
+      <section class="history-card" aria-labelledby="history-title">
+        <div class="history-heading"><div><div class="title-row"><h2 id="history-title">Vardiya geçmişi</h2><span class="count" id="record-count">—</span></div><p class="muted">Kayıtlarını incele veya Excel olarak indir.</p></div><button id="export-button" type="button" class="button outline" disabled><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 3v12m-5-5 5 5 5-5M4 15v5h16v-5"/></svg><span id="export-label">Excel’e aktar</span></button></div>
+        <form id="filter-form" class="filters"><div><label for="from">Başlangıç tarihi</label><input id="from" name="from" type="date"></div><div><label for="to">Bitiş tarihi</label><input id="to" name="to" type="date"></div><div id="scope-field" hidden><label for="scope">Kayıtlar</label><select id="scope" name="scope"><option value="own">Kendi vardiyalarım</option><option value="all">Tüm personel</option></select></div><div class="filter-actions"><button class="button secondary" id="filter-button" type="submit">Uygula</button><button type="button" id="clear-filters" class="text-button" hidden>Temizle</button></div></form>
+        <p class="filter-note" id="filter-note">Tüm tarihler gösteriliyor. Saatler İstanbul saatidir.</p>
+        <p class="scroll-hint">Tüm sütunları görmek için tabloyu yana kaydırabilirsin.</p>
+        <div id="table-loading" class="empty-state">Kayıtlar yükleniyor…</div>
+        <div id="empty-state" class="empty-state" hidden><div class="empty-icon" aria-hidden="true">≡</div><h3 id="empty-title">Henüz bir vardiya kaydın yok.</h3><p id="empty-description">İlk kaydını oluşturmak için yukarıdan vardiyanı başlat.</p></div>
+        <div class="table-wrap" id="table-wrap" hidden><table><caption class="sr-only">Seçili tarih aralığındaki vardiyalar</caption><thead><tr><th scope="col">Vardiya</th><th scope="col" id="person-heading" hidden>Personel</th><th scope="col">Başlangıç</th><th scope="col">Bitiş</th><th scope="col">Süre</th><th scope="col">Durum</th></tr></thead><tbody id="shift-rows"></tbody></table></div>
+        <div class="table-footer"><span id="page-label">—</span><div class="pagination"><button id="previous" type="button" class="button small quiet" disabled aria-label="Önceki sayfa">← Önceki</button><button id="next" type="button" class="button small quiet" disabled aria-label="Sonraki sayfa">Sonraki →</button></div></div>
+      </section>
+      <footer class="workspace-footer"><span>Vardiya Defteri</span><span>Excel dosyası seçili tarih aralığını kapsar · En fazla 5.000 kayıt</span></footer>
+    </main>
+  </div>
+</body>
+</html>

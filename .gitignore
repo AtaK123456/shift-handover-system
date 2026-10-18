@@ -4,3 +4,5 @@ dist/
 .env.*
 !.env.example
 src/generated/
+test-results/
+playwright-report/

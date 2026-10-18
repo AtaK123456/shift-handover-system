@@ -1,0 +1,95 @@
+import { test, expect, type Page } from "@playwright/test";
+import { randomUUID } from "node:crypto";
+import ExcelJS from "exceljs";
+import { createPrismaClient } from "../../src/database.js";
+import { hashPassword } from "../../src/password.js";
+const db = createPrismaClient(process.env.TEST_DATABASE_URL);
+const password = "test-password-12345";
+const suffix = randomUUID();
+const workerEmail = `worker-${suffix}@example.com`;
+const managerEmail = `manager-${suffix}@example.com`;
+const registrationEmail = `register-${suffix}@example.com`;
+const emails = [workerEmail, managerEmail, registrationEmail];
+let workerId: number;
+test.beforeAll(async () => {
+  const hash = await hashPassword(password);
+  const worker = await db.user.create({ data: { name: "Deniz Yılmaz", email: workerEmail, password: hash } });
+  workerId = worker.id;
+  await db.user.create({ data: { name: "Ece Kaya", email: managerEmail, password: hash, role: "MANAGER" } });
+});
+test.afterAll(async () => {
+  const users = await db.user.findMany({ where: { email: { in: emails } }, select: { id: true } });
+  const ids = users.map(u => u.id);
+  await db.shift.deleteMany({ where: { userId: { in: ids } } });
+  await db.user.deleteMany({ where: { id: { in: ids } } });
+  await db.$disconnect();
+});
+async function login(page: Page, email = workerEmail) {
+  await page.goto("/app/");
+  await page.getByLabel("E-posta adresi").fill(email);
+  await page.getByLabel("Şifre", { exact: true }).fill(password);
+  await page.getByRole("button", { name: /Giriş yap/ }).click();
+  await expect(page.locator("#dashboard")).toBeVisible();
+  await expect(page.getByRole("button", { name: /Excel’e aktar/ })).toBeEnabled();
+}
+test("login, start/end shift, filtered history and real Excel download", async ({ page }) => {
+  const errors: string[] = [];
+  page.on("pageerror", error => errors.push(error.message));
+  await login(page);
+  await expect(page.locator("#scope-field")).toBeHidden();
+  await expect(page.getByText("Henüz bir vardiya kaydı yok.")).toBeVisible();
+  await page.getByRole("button", { name: /Vardiyayı başlat/ }).click();
+  await expect(page.getByRole("heading", { name: "Vardiyan devam ediyor." })).toBeVisible();
+  await expect(page.locator("#shift-rows tr")).toHaveCount(1);
+  await page.getByRole("button", { name: /Vardiyayı bitir/ }).click();
+  await expect(page.getByRole("heading", { name: "Yeni bir vardiyaya hazır mısın?" })).toBeVisible();
+  await expect(page.locator("#shift-rows").getByText("Tamamlandı")).toBeVisible();
+  const downloading = page.waitForEvent("download");
+  await page.getByRole("button", { name: /Excel’e aktar/ }).click();
+  const download = await downloading;
+  expect(download.suggestedFilename()).toMatch(/^vardiyalar-.*\.xlsx$/);
+  const workbook = new ExcelJS.Workbook();
+  await workbook.xlsx.readFile((await download.path())!);
+  expect(workbook.getWorksheet("Vardiyalar")!.getCell("C2").value).toBe("Deniz Yılmaz");
+  await page.locator("#from").fill("2000-01-01");
+  await page.locator("#to").fill("2000-01-02");
+  await expect(page.locator("#export-button")).toBeDisabled();
+  await page.getByRole("button", { name: "Uygula", exact: true }).click();
+  await expect(page.getByText("Bu tarih aralığında kayıt bulunamadı.")).toBeVisible();
+  await page.getByRole("button", { name: "Temizle", exact: true }).click();
+  await expect(page.locator("#shift-rows tr")).toHaveCount(1);
+  await page.screenshot({ path: "../frontend-desktop.png", fullPage: true });
+  expect(errors).toEqual([]);
+  expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
+});
+test("manager can select team records", async ({ page }) => {
+  await login(page, managerEmail);
+  await expect(page.locator("#scope-field")).toBeVisible();
+  await page.getByLabel("Kayıtlar", { exact: true }).selectOption("all");
+  await page.getByRole("button", { name: "Uygula", exact: true }).click();
+  await expect(page.getByRole("cell", { name: "Deniz Yılmaz", exact: true })).toBeVisible();
+  await expect(page.getByRole("columnheader", { name: "Personel", exact: true })).toBeVisible();
+});
+test("mobile layout and logout", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await login(page);
+  await expect(page.getByRole("button", { name: /Vardiyayı başlat/ })).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  await page.screenshot({ path: "../frontend-mobile.png", fullPage: true });
+  await page.getByRole("button", { name: "Çıkış yap", exact: true }).click();
+  await expect(page.locator("#dashboard")).toBeHidden();
+  await expect(page.getByLabel("Şifre", { exact: true })).toHaveValue("");
+});
+test("registration creates a worker who can sign in", async ({ page }) => {
+  await page.goto("/app/");
+  await page.getByRole("button", { name: "Hesap oluştur", exact: true }).click();
+  await page.getByLabel("Ad soyad").fill("Yeni Kullanıcı");
+  await page.getByLabel("E-posta adresi").fill(registrationEmail);
+  await page.getByLabel("Şifre", { exact: true }).fill(password);
+  await page.getByRole("button", { name: /Hesap oluştur →/ }).click();
+  await expect(page.getByText("Hesabın oluşturuldu. Şimdi giriş yapabilirsin.")).toBeVisible();
+  await page.getByLabel("Şifre", { exact: true }).fill(password);
+  await page.getByRole("button", { name: /Giriş yap/ }).click();
+  await expect(page.getByRole("heading", { name: "Merhaba, Yeni." })).toBeVisible();
+  await expect(page.locator("#scope-field")).toBeHidden();
+});

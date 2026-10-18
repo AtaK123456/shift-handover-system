@@ -92,3 +92,58 @@ bir `201`, diğerlerinde `409`; 8 eşzamanlı bitirmede bir `200`, diğerlerinde
 bekler. Doğrudan veritabanı yazarı da aynı kısıta tabidir. Ayrıca başka bir kullanıcının
 vardiyası, tamamlanmış vardiya geçmişi ve mükerrer veri bulunan migration'ın
 hiçbir kayıt değiştirmeden durması doğrulanır. Testlerin oluşturduğu kayıtlar temizlenir.
+
+## Web arayüzü ve Excel
+
+Uygulama başladıktan sonra **http://localhost:3000/app/** adresini açın.
+Ana adres `/` de bu ekrana yönlendirir. Frontend `public/` klasöründedir ve
+API ile aynı sunucudan çalışır; ayrı frontend kurulumu veya derlemesi gerekmez.
+
+- Giriş yapın veya hesap oluşturun. Yeni hesaplar ÇALIŞAN (`WORKER`) rolündedir.
+- Üstteki karttan vardiyayı başlatın/bitirin; saatler otomatik kaydedilir.
+- Geçmiş listesinde tarihler seçip **Uygula** düğmesine basın.
+- **Excel’e aktar**, uygulanan filtredeki tüm kayıtları indirir; yalnızca görünen
+  sayfayı indirmez. Tarihleri boş bırakırsanız tüm tarihler seçilir.
+- Yönetici rolünde **Kayıtlar → Tüm personel** seçeneği görünür. Diğer roller
+  yalnızca kendi vardiyalarını görebilir ve indirebilir.
+
+Excel dosyasında vardiya no, personel no/ad/e-posta, başlangıç, bitiş, durum ve
+saat olarak süre vardır. Tarihler vardiyanın başlangıcına göre ve İstanbul
+saatinde süzülür; iki uç tarih de dahildir. Aktif vardiyanın bitişi ve nihai
+süresi boş kalır. Dosya en fazla 5.000 satır içerir; sınır aşılırsa kayıtlar
+kesilmeden hata verilir ve tarih aralığını daraltmanız istenir. Boş sonuçta da
+başlıkları olan geçerli bir dosya indirilir. Kullanıcı metinleri Excel formülü
+olarak değerlendirilmez. Şifre ve JWT verileri dosyaya dahil edilmez.
+
+Token yalnızca sayfa belleğinde saklanır; sayfayı yenilemek yeniden giriş
+gerektirir. Tarayıcı depolarına yazılmaz. Excel indirmesi IP başına 15 dakikada
+5 istekle sınırlıdır. Üretimde HTTPS kullanın.
+
+### Yeni API yolları
+
+`Authorization: Bearer <token>` gerektirir:
+
+- `GET /shifts?from=2026-10-01&to=2026-10-31&scope=own&page=1`
+  → `{ items, total, page, pageSize }`, sayfa başına 20 kayıt, en yeni önce.
+- `GET /shifts/export?from=2026-10-01&to=2026-10-31&scope=own`
+  → `.xlsx` eki, başlangıç tarihine göre eskiden yeniye.
+
+`scope=own` varsayılandır. `scope=all` yalnızca güncel veritabanı rolü MANAGER
+olan kullanıcıya açıktır. Tarihler isteğe bağlıdır; `YYYY-AA-GG` biçimindedir.
+ExcelJS içindeki uuid alt bağımlılığı, CommonJS uyumlu ve güvenlik düzeltmesini
+içeren 11.1.1 sürümüne sabitlenmiştir.
+
+### Tarayıcı testleri
+
+Önce `npm run build` ve test veritabanı migration'larını çalıştırın.
+Test için ayrılmış PostgreSQL bağlantısını `TEST_DATABASE_URL` olarak tanımlayın:
+
+```sh
+npx playwright install chromium
+npm run test:e2e
+```
+
+İstenirse sistem Chromium yolu `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` ile verilir.
+Testler kendi yerel sunucusunu başlatır ve durdurur; 3000 portu boş olmalıdır.
+Giriş/kayıt, vardiya başlatma/bitirme, filtreleme, gerçek Excel indirmesi,
+yönetici görünümü, mobil taşma ve çıkış akışları kontrol edilir.

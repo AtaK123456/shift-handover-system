@@ -1,3 +1,6 @@
+import { fileURLToPath } from "node:url";
+import { createShiftWorkbook, MAX_EXPORT_ROWS } from "./services/export.service.js";
+import { shiftFilter, RequestError } from "./services/shift-query.js";
 import express, { type ErrorRequestHandler } from "express";
 import jwt from "jsonwebtoken";
 import helmet from "helmet";
@@ -30,7 +33,9 @@ export function createApp(prisma: PrismaClient, secret: string) {
     standardHeaders: "draft-8", legacyHeaders: false,
     message: { error: "Çok fazla deneme. Lütfen daha sonra tekrar deneyin." } });
 
-  app.get("/", (_req, res) => { res.send("Vardiya defteri API çalışıyor..."); });
+
+  app.get("/", (_req, res) => { res.redirect("/app/"); });
+  app.use("/app", express.static(fileURLToPath(new URL("../public", import.meta.url))));
   app.get("/users", authenticate, requireManager, async (_req, res) => {
     const users = await prisma.user.findMany({ select: {
       id: true, email: true, name: true, role: true, createdAt: true
@@ -60,7 +65,7 @@ export function createApp(prisma: PrismaClient, secret: string) {
     const matches = await verifyPassword(input.password, user?.password);
     if (!user || !matches) return res.status(401).json({ error: "Email veya şifre hatalı" });
     const token = jwt.sign({ id: user.id }, secret, { algorithm: "HS256", expiresIn: "8h" });
-    res.json({ token, user: { id: user.id, email: user.email, name: user.name } });
+    res.json({ token, user: { id: user.id, email: user.email, name: user.name, role: user.role } });
   });
   app.post("/shifts/start", authenticate, async (req, res) => {
     res.status(201).json(await shifts.startShift(req.user!.id));
@@ -71,10 +76,40 @@ export function createApp(prisma: PrismaClient, secret: string) {
   app.get("/shifts/current", authenticate, async (req, res) => {
     res.json({ currentShift: await shifts.getCurrentShift(req.user!.id) ?? null });
   });
+  app.get("/shifts", authenticate, async (req, res) => {
+    const where = shiftFilter(req.query, req.user!);
+    const pageInput = req.query.page ?? "1";
+    if (typeof pageInput !== "string" || !/^[1-9]\d{0,3}$/.test(pageInput)) {
+      throw new RequestError("Geçersiz sayfa numarası.", 400);
+    }
+    const page = Number(pageInput);
+    const pageSize = 20;
+    const [items, total] = await Promise.all([
+      prisma.shift.findMany({ where, orderBy: [{ startTime: "desc" }, { id: "desc" }],
+        skip: (page - 1) * pageSize, take: pageSize,
+        select: { id: true, startTime: true, endTime: true, status: true,
+          user: { select: { id: true, name: true, email: true } } }
+      }),
+      prisma.shift.count({ where })
+    ]);
+    res.json({ items, total, page, pageSize });
+  });
+  app.get("/shifts/export", authenticate, limiter(5), async (req, res) => {
+    const where = shiftFilter(req.query, req.user!);
+    const buffer = await createShiftWorkbook(prisma, where);
+    if (!buffer) {
+      return res.status(413).json({ error: `En fazla ${MAX_EXPORT_ROWS} vardiya aktarılabilir. Tarih aralığını daraltın.` });
+    }
+    const date = new Intl.DateTimeFormat("sv-SE", { timeZone: "Europe/Istanbul" }).format(new Date());
+    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    res.setHeader("Content-Disposition", `attachment; filename="vardiyalar-${date}.xlsx"`);
+    res.send(Buffer.from(buffer));
+  });
   const errorHandler: ErrorRequestHandler = (error, _req, res, _next) => {
     const status = error?.statusCode ?? error?.status;
     if (status === 413) return res.status(413).json({ error: "İstek boyutu çok büyük." });
     if (error?.type === "entity.parse.failed") return res.status(400).json({ error: "Geçersiz JSON." });
+    if (error instanceof RequestError) return res.status(error.statusCode).json({ error: error.message });
     if (status === 404 || status === 409) return res.status(status).json({ error: error.message });
     res.status(500).json({ error: "Sunucu hatası oluştu." });
   };
