@@ -7,7 +7,7 @@ import { createApp } from "../src/app.js";
 import type { PrismaClient } from "../src/generated/prisma/client.js";
 import { MAX_EXPORT_ROWS } from "../src/services/export.service.js";
 const secret = "export-test-secret-".repeat(3);
-const sample = { id: 7, startTime: new Date("2026-10-19T05:00:00Z"), endTime: new Date("2026-10-19T13:30:00Z"), status: "COMPLETED", user: { id: 1, name: '=HYPERLINK("https://example.com")', email: "a@example.com" } };
+const sample = { id: 7, startTime: new Date("2026-10-19T05:00:00Z"), endTime: new Date("2026-10-19T13:30:00Z"), status: "COMPLETED", shiftDate: "2026-10-19", scheduledStart: "08:00", scheduledEnd: "16:00", user: { id: 1, name: '=HYPERLINK("https://example.com")', email: "a@example.com" } };
 function setup(role = "WORKER", rows = [sample]) {
   let query: any;
   let counted: any;
@@ -40,7 +40,8 @@ test("export is a real XLSX, uses own-user filter, and keeps untrusted text out 
   assert.equal(sheet.getCell("C2").value, sample.user.name);
   assert.equal(sheet.getCell("C2").type, ExcelJS.ValueType.String);
   assert.equal(sheet.getCell("E2").value, "2026-10-19 08:00:00");
-  assert.equal(sheet.getCell("H2").value, 8.5);
+  assert.equal(sheet.getCell("H2").value, "2026-10-19");
+  assert.equal(sheet.getCell("I2").value, "08:00–16:00");
   assert.equal(query().where.userId, 1);
   assert.equal(query().take, MAX_EXPORT_ROWS + 1);
   assert.deepEqual(query().select.user.select, { id: true, name: true, email: true });
@@ -92,7 +93,8 @@ test("empty export has headers; active shifts have no final end or duration", as
   const { app } = setup("WORKER", [active] as any);
   const sheet = await workbook(await download(app).expect(200));
   assert.equal(sheet.getCell("G2").value, "Aktif");
-  assert.equal(sheet.getCell("H2").value, null);
+  assert.equal(sheet.getCell("F2").value, "");
+  assert.equal(sheet.getCell("I2").value, "08:00–16:00");
 });
 test("oversized exports are rejected without silently truncating, with rate limiting", async () => {
   const { app } = setup("WORKER", Array(MAX_EXPORT_ROWS + 1).fill(sample));
@@ -108,4 +110,14 @@ test("frontend assets are served with the security policy", async () => {
   assert.match(res.text, /Vardiya Defteri/);
   assert.match(res.headers["content-security-policy"], /script-src 'self'/);
   await request(app).get("/app/app.js").expect(200);
+});
+
+test("English language selection produces English Excel headers and shift hours", async () => {
+  const { app } = setup();
+  const res = await download(app).set("Accept-Language", "en").expect(200);
+  const book = new ExcelJS.Workbook(); await book.xlsx.load(res.body);
+  const sheet = book.getWorksheet("Shifts")!;
+  assert.equal(sheet.getCell("H1").value, "Shift date");
+  assert.equal(sheet.getCell("I2").value, "08:00–16:00");
+  assert.equal(sheet.getCell("G2").value, "Completed");
 });

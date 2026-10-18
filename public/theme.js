@@ -11,8 +11,8 @@
     document.documentElement.dataset.theme = theme;
     document.querySelector('meta[name="theme-color"]')?.setAttribute("content", dark ? "#111c19" : "#f6f7f4");
     document.querySelectorAll("[data-theme-toggle]").forEach(button => {
-      button.textContent = dark ? "Açık mod" : "Koyu mod";
-      button.setAttribute("aria-label", dark ? "Açık moda geç" : "Koyu moda geç");
+      button.textContent = window.appI18n ? window.appI18n.t(dark ? "light" : "dark") : dark ? "Açık mod" : "Koyu mod";
+      button.setAttribute("aria-label", window.appI18n ? window.appI18n.t(dark ? "lightLabel" : "darkLabel") : dark ? "Açık moda geç" : "Koyu moda geç");
       button.setAttribute("aria-pressed", String(dark));
     });
   }
@@ -27,6 +27,7 @@
       });
     });
   });
+  window.addEventListener("languagechange", apply);
   system.addEventListener("change", () => { if (!preference) apply(); });
   window.addEventListener("storage", event => {
     if (event.key === key || event.key === null) { preference = valid(event.newValue); apply(); }

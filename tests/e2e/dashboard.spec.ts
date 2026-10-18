@@ -86,7 +86,7 @@ test("registration creates a worker who can sign in", async ({ page }) => {
   await page.getByLabel("Ad soyad").fill("Yeni Kullanıcı");
   await page.getByLabel("E-posta adresi").fill(registrationEmail);
   await page.getByLabel("Şifre", { exact: true }).fill(password);
-  await page.getByRole("button", { name: /Hesap oluştur →/ }).click();
+  await page.locator("#login-button").click();
   await expect(page.getByText("Hesabın oluşturuldu. Şimdi giriş yapabilirsin.")).toBeVisible();
   await page.getByLabel("Şifre", { exact: true }).fill(password);
   await page.getByRole("button", { name: /Giriş yap/ }).click();

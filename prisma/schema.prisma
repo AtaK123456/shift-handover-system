@@ -35,6 +35,10 @@ model User {
   createdAt  DateTime   @default(now())
   shifts     Shift[]
   logs       Log[]
+  operationEntries OperationEntry[] @relation("EntryAuthor")
+  closedEntries OperationEntry[] @relation("EntryCloser")
+  equipmentUpdates Equipment[]
+  equipmentChanges EquipmentChange[]
   handoversFrom Handover[] @relation("HandoverFrom")
   handoversTo   Handover[] @relation("HandoverTo")
 }
@@ -49,6 +53,10 @@ model Shift {
   logs       Log[]
   handovers  Handover[]
   reports    Report[]
+  operationEntries OperationEntry[]
+  shiftDate String?
+  scheduledStart String?
+  scheduledEnd String?
   createdAt  DateTime   @default(now())
 
   @@unique([userId], map: "Shift_one_active_per_user", where: raw("(status = 'ACTIVE'::\"ShiftStatus\")"))
@@ -83,4 +91,74 @@ model Report {
   shift       Shift    @relation(fields: [shiftId], references: [id])
   summary     String
   generatedAt DateTime @default(now())
+}
+
+enum EquipmentStatus {
+  UNKNOWN
+  ACTIVE
+  INACTIVE
+  MAINTENANCE
+}
+
+enum EntryKind {
+  EVENT
+  NOTE
+  VALVE
+  ATTENTION
+  TASK
+}
+
+enum EntryPriority {
+  NORMAL
+  HIGH
+}
+
+model Equipment {
+  code String @id
+  status EquipmentStatus @default(UNKNOWN)
+  note String @default("")
+  version Int @default(0)
+  updatedAt DateTime?
+  updatedById Int?
+  updatedBy User? @relation(fields: [updatedById], references: [id])
+  changes EquipmentChange[]
+}
+
+model EquipmentChange {
+  id Int @id @default(autoincrement())
+  equipmentCode String
+  equipment Equipment @relation(fields: [equipmentCode], references: [code])
+  fromStatus EquipmentStatus
+  toStatus EquipmentStatus
+  note String
+  userId Int
+  user User @relation(fields: [userId], references: [id])
+  createdAt DateTime @default(now())
+}
+
+model OperationEntry {
+  id Int @id @default(autoincrement())
+  kind EntryKind
+  priority EntryPriority @default(NORMAL)
+  title String
+  description String
+  createdAt DateTime @default(now())
+  authorId Int
+  author User @relation("EntryAuthor", fields: [authorId], references: [id])
+  shiftId Int?
+  shift Shift? @relation(fields: [shiftId], references: [id], onDelete: SetNull)
+  closedAt DateTime?
+  closedById Int?
+  closedBy User? @relation("EntryCloser", fields: [closedById], references: [id])
+  closeNote String?
+  photos OperationPhoto[]
+  @@index([closedAt, kind, createdAt])
+}
+
+model OperationPhoto {
+  id String @id @default(uuid())
+  entryId Int
+  entry OperationEntry @relation(fields: [entryId], references: [id], onDelete: Cascade)
+  data Bytes
+  createdAt DateTime @default(now())
 }

@@ -107,10 +107,8 @@ API ile aynı sunucudan çalışır; ayrı frontend kurulumu veya derlemesi gere
 - Yönetici rolünde **Kayıtlar → Tüm personel** seçeneği görünür. Diğer roller
   yalnızca kendi vardiyalarını görebilir ve indirebilir.
 
-Excel dosyasında vardiya no, personel no/ad/e-posta, başlangıç, bitiş, durum ve
-saat olarak süre vardır. Tarihler vardiyanın başlangıcına göre ve İstanbul
-saatinde süzülür; iki uç tarih de dahildir. Aktif vardiyanın bitişi ve nihai
-süresi boş kalır. Dosya en fazla 5.000 satır içerir; sınır aşılırsa kayıtlar
+Excel dosyasında vardiya no, personel no/ad/e-posta, başlangıç, bitiş, durum, vardiya tarihi ve seçilen vardiya saatleri vardır. Tarihler vardiyanın başlangıcına göre ve İstanbul
+saatinde süzülür; iki uç tarih de dahildir. Aktif vardiyanın gerçek bitişi boş kalır. Dosya en fazla 5.000 satır içerir; sınır aşılırsa kayıtlar
 kesilmeden hata verilir ve tarih aralığını daraltmanız istenir. Boş sonuçta da
 başlıkları olan geçerli bir dosya indirilir. Kullanıcı metinleri Excel formülü
 olarak değerlendirilmez. Şifre ve JWT verileri dosyaya dahil edilmez.
@@ -156,3 +154,44 @@ Elle seçilen tema yalnızca `vardiya-theme` anahtarıyla tarayıcıda saklanır
 sayfa yenilenince, ekran değiştirince ve çıkış yapınca korunur. Şifre ve token
 bu tercihle birlikte kaydedilmez. Tarayıcı depolaması kapalıysa tema o sayfada
 çalışmaya devam eder; sonraki açılışta cihaz tercihi kullanılır.
+
+## Tesis devir paneli
+
+- GT1/GT2 gaz türbinleri ve ST buhar türbini için **Belirtilmedi / Devrede /
+  Devre dışı / Bakımda** seçilir; durum notu, güncelleyen kişi ve zaman görünür.
+  Durumlar manuel kayıttır; yeni kurulumda hiçbir ünite otomatik olarak devrede
+  kabul edilmez. Değişiklikler EquipmentChange tablosunda saklanır; eski sürüm
+  üzerinden güncelleme 409 döner ve yenileme gerektirir.
+- **Olay / Not / Aktif vana / Dikkat edilecek konu / Devam eden iş** kayıtları
+  başlık, açıklama ve önem derecesiyle oluşturulur. Açık vana/dikkat/iş kayıtları
+  vardiya bitince kaybolmaz; biri kapatana kadar ortak devir panelinde kalır.
+  Kapanış notu, kapatan kişi ve tarih saklanır; geçmiş kayıt silinmez. Olay/not
+  türleri doğrudan geçmiş bölümünde görünür.
+- Bu sürüm tek tesis içindir. Tüm giriş yapan roller ortak tesis durumlarını ve
+  devir kayıtlarını görür; kayıt ekleyebilir, ünite durumu güncelleyebilir ve açık
+  işleri kapatabilir. Kişisel vardiya listesi/Excel için önceki rol kısıtları sürer.
+- Bir kayda en fazla 3 JPEG/PNG/WebP fotoğraf (her biri en fazla 5 MB) eklenir.
+  Görsel gerçek içerikten doğrulanır, en fazla 1600x1600'e küçültülüp JPEG'e
+  dönüştürülür; EXIF korunmaz. Fotoğraflar PostgreSQL'de saklanır ve yedeklemeye
+  dahildir. Fotoğraf URL'si de JWT doğrulaması gerektirir; herkese açık dosya
+  servisi yoktur. Görseller indirildiğinde sayfada geçici blob URL'si kullanılır.
+- Ortak panel 30 saniyede bir yenilenir; **Yenile** ile hemen güncellenir.
+- Vardiya tarihi ve 00:00–08:00 / 08:00–16:00 / 16:00–00:00 aralıklarından biri
+  başlangıçta seçilir. Tarih, aralığın başladığı gündür; 16:00–00:00 vardiyası
+  ertesi gün biter. Gerçek giriş/çıkış saati ayrıca saklanır. Geçen süre kaldırıldı.
+  Eski kayıtlara saat aralığı uydurulmaz; belirtilmemiş olarak görünür.
+- Türkçe/English seçimi giriş ve panelde bulunur, `vardiya-language` tercihi
+  tarayıcıda korunur. Arayüz ve Excel başlıkları çevrilir; operatörün kendi
+  yazdığı notlar otomatik çevrilmez. Saat dilimi her iki dilde İstanbul'dur.
+
+### Güncelleme
+
+Veritabanını yedekleyin; yeni tablolar ve nullable vardiya alanları için
+`npx prisma migrate deploy` çalıştırın, ardından `npm run build` ve `npm start`.
+Bu migration mevcut vardiya, olay veya kullanıcı kayıtlarını silmez.
+
+Yeni yolların tümü `Authorization: Bearer <token>` gerektirir:
+`GET /operations/equipment`, `PUT /operations/equipment/:code`,
+`GET /operations/entries?view=open|history&page=1`, `POST /operations/entries`
+(JSON veya multipart; `photos` dosya alanı), `POST /operations/entries/:id/close`,
+`GET /operations/photos/:id`.

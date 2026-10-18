@@ -1,3 +1,6 @@
+import { createOperationsRouter } from "./routes/operations.js";
+import { shiftSchedule } from "./services/schedule.js";
+import multer from "multer";
 import { fileURLToPath } from "node:url";
 import { createShiftWorkbook, MAX_EXPORT_ROWS } from "./services/export.service.js";
 import { shiftFilter, RequestError } from "./services/shift-query.js";
@@ -26,7 +29,7 @@ export function createApp(prisma: PrismaClient, secret: string) {
   const authenticate = authenticateToken(prisma, secret);
   const shifts = createShiftService(prisma);
   app.disable("x-powered-by");
-  app.use(helmet());
+  app.use(helmet({ contentSecurityPolicy: { directives: { imgSrc: ["'self'", "data:", "blob:"] } } }));
   app.use(express.json({ limit: "16kb" }));
   app.use((_req, res, next) => { res.setHeader("Cache-Control", "no-store"); next(); });
   const limiter = (limit: number) => rateLimit({ windowMs: 15 * 60 * 1000, limit,
@@ -68,7 +71,7 @@ export function createApp(prisma: PrismaClient, secret: string) {
     res.json({ token, user: { id: user.id, email: user.email, name: user.name, role: user.role } });
   });
   app.post("/shifts/start", authenticate, async (req, res) => {
-    res.status(201).json(await shifts.startShift(req.user!.id));
+    res.status(201).json(await shifts.startShift(req.user!.id, shiftSchedule(req.body)));
   });
   app.post("/shifts/end", authenticate, async (req, res) => {
     res.json({ message: "Vardiya başarıyla sonlandırıldı.", shift: await shifts.endShift(req.user!.id) });
@@ -87,7 +90,7 @@ export function createApp(prisma: PrismaClient, secret: string) {
     const [items, total] = await Promise.all([
       prisma.shift.findMany({ where, orderBy: [{ startTime: "desc" }, { id: "desc" }],
         skip: (page - 1) * pageSize, take: pageSize,
-        select: { id: true, startTime: true, endTime: true, status: true,
+        select: { id: true, startTime: true, endTime: true, status: true, shiftDate: true, scheduledStart: true, scheduledEnd: true,
           user: { select: { id: true, name: true, email: true } } }
       }),
       prisma.shift.count({ where })
@@ -96,7 +99,7 @@ export function createApp(prisma: PrismaClient, secret: string) {
   });
   app.get("/shifts/export", authenticate, limiter(5), async (req, res) => {
     const where = shiftFilter(req.query, req.user!);
-    const buffer = await createShiftWorkbook(prisma, where);
+    const buffer = await createShiftWorkbook(prisma, where, req.get("Accept-Language")?.toLowerCase().startsWith("en") ? "en" : "tr");
     if (!buffer) {
       return res.status(413).json({ error: `En fazla ${MAX_EXPORT_ROWS} vardiya aktarılabilir. Tarih aralığını daraltın.` });
     }
@@ -105,7 +108,9 @@ export function createApp(prisma: PrismaClient, secret: string) {
     res.setHeader("Content-Disposition", `attachment; filename="vardiyalar-${date}.xlsx"`);
     res.send(Buffer.from(buffer));
   });
+  app.use("/operations", authenticate, createOperationsRouter(prisma));
   const errorHandler: ErrorRequestHandler = (error, _req, res, _next) => {
+    if (error instanceof multer.MulterError) return res.status(400).json({ error: "En fazla 3 fotoğraf, fotoğraf başına en fazla 5 MB yükleyin." });
     const status = error?.statusCode ?? error?.status;
     if (status === 413) return res.status(413).json({ error: "İstek boyutu çok büyük." });
     if (error?.type === "entity.parse.failed") return res.status(400).json({ error: "Geçersiz JSON." });

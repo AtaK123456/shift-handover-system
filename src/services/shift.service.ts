@@ -7,10 +7,10 @@ class ShiftError extends Error {
 }
 
 export function createShiftService(prisma: PrismaClient) {
-  async function startShift(userId: number) {
+  async function startShift(userId: number, schedule?: { shiftDate: string; scheduledStart: string; scheduledEnd: string }) {
     // The database index arbitrates concurrent requests, including across servers.
     try {
-      return await prisma.shift.create({ data: { userId, status: ShiftStatus.ACTIVE } });
+      return await prisma.shift.create({ data: { userId, status: ShiftStatus.ACTIVE, ...schedule } });
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
         const adapterError = error.meta?.driverAdapterError as {
