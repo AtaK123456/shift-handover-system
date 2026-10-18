@@ -6,12 +6,13 @@
 
 generator client {
   provider = "prisma-client"
+  importFileExtension = "js"
+  previewFeatures = ["partialIndexes"]
   output   = "../src/generated/prisma"
 }
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
 }
 
 enum Role {
@@ -49,6 +50,8 @@ model Shift {
   handovers  Handover[]
   reports    Report[]
   createdAt  DateTime   @default(now())
+
+  @@unique([userId], map: "Shift_one_active_per_user", where: raw("(status = 'ACTIVE'::\"ShiftStatus\")"))
 }
 
 model Handover {
