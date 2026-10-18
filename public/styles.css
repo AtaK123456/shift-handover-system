@@ -7,3 +7,5 @@
 /* Keep record details readable on both desktop and compact screens. */
 td{font-size:13px}th{font-size:11px}.date-cell small{font-size:11px;color:#718068}.status{font-size:11px;color:#526d46}.status.active{color:#3d7431}.filter-note{font-size:11px;color:#68765f}.table-footer{font-size:11px;color:#6f7d65}.shift-main>p{font-size:13px}.shift-action>span{font-size:10px}.history-heading p{font-size:12px}.workspace-footer{font-size:10px;color:#6f7d65}.scroll-hint{display:none}
 @media(max-width:600px){.scroll-hint{display:block;font-size:10px;color:#68765f;padding:0 18px 14px}.history-heading p{font-size:11px}}
+
+.password-field{position:relative}.password-field input{padding-right:82px}.password-toggle{position:absolute;right:7px;top:50%;transform:translateY(-50%);min-width:64px;min-height:34px;padding:6px 10px;border:0;border-radius:5px;background:transparent;color:#24684b;font:inherit;font-size:12px;font-weight:650}.password-toggle:hover{background:#edf3ed}

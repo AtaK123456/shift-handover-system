@@ -22,7 +22,11 @@
         <form id="login-form">
           <div id="name-field" hidden><label for="name">Ad soyad</label><input id="name" name="name" autocomplete="name" maxlength="100" placeholder="Adın ve soyadın"></div>
           <label for="email">E-posta adresi</label><input id="email" name="email" type="email" autocomplete="username" required maxlength="254" placeholder="ornek@sirket.com">
-          <label for="password">Şifre</label><input id="password" name="password" type="password" autocomplete="current-password" required placeholder="Şifreni gir">
+          <label for="password">Şifre</label>
+          <div class="password-field">
+            <input id="password" name="password" type="password" autocomplete="current-password" required placeholder="Şifreni gir">
+            <button id="toggle-password" type="button" class="password-toggle" aria-controls="password" aria-label="Şifreyi göster" aria-pressed="false">Göster</button>
+          </div>
           <p id="password-hint" class="hint" hidden>En az 12 karakter kullan.</p>
           <button type="submit" id="login-button" class="button primary full">Giriş yap <span aria-hidden="true">→</span></button>
         </form>

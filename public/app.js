@@ -66,7 +66,19 @@ async function api(path, options = {}) {
 function showError(error) {
   if (error.name !== "AbortError") notify(error.message || "Bir hata oluştu. Tekrar dene.", true);
 }
+function setPasswordVisible(visible) {
+  $("password").type = visible ? "text" : "password";
+  $("toggle-password").textContent = visible ? "Gizle" : "Göster";
+  $("toggle-password").setAttribute("aria-label", visible ? "Şifreyi gizle" : "Şifreyi göster");
+  $("toggle-password").setAttribute("aria-pressed", String(visible));
+}
+$("toggle-password").addEventListener("click", () => {
+  setPasswordVisible($("password").type === "password");
+});
+$("login-form").addEventListener("reset", () => setPasswordVisible(false));
+
 function authMode(register) {
+  setPasswordVisible(false);
   signingUp = register;
   $("name-field").hidden = !register;
   $("name").required = register;
@@ -103,6 +115,7 @@ $("login-form").addEventListener("submit", async (event) => {
     }
     const data = await response.json();
     token = data.token; user = data.user; current = undefined;
+    setPasswordVisible(false);
     $("password").value = "";
     $("account-name").textContent = user.name;
     $("account-role").textContent = roles[user.role] || "Çalışan";
