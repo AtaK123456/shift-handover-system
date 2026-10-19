@@ -131,7 +131,10 @@ export function createAiAssistant({ api, isSaving }) {
     if (busy || result) invalidate("aiStale");
   });
   $("entry-form").addEventListener("reset", () => invalidate());
-  window.addEventListener("languagechange", () => { invalidate(result || busy ? "aiStale" : ""); });
+  window.addEventListener("languagechange", () => {
+    if (failed && !busy && !result) render();
+    else invalidate(result || busy ? "aiStale" : "");
+  });
   return {
     render,
     dirty: () => Boolean(record || $("ai-chat-input").value.trim()),
