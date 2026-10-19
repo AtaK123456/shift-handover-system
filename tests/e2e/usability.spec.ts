@@ -1,0 +1,97 @@
+import { test, expect, type Page } from "@playwright/test";
+import { randomUUID } from "node:crypto";
+import sharp from "sharp";
+import { createPrismaClient } from "../../src/database.js";
+import { hashPassword } from "../../src/password.js";
+const db = createPrismaClient(process.env.TEST_DATABASE_URL);
+const suffix = randomUUID(), password = "usability-test-password";
+const emails = [`ux-a-${suffix}@example.com`, `ux-b-${suffix}@example.com`];
+const users: number[] = [];
+test.beforeAll(async () => {
+  const hash = await hashPassword(password);
+  for (const [index, email] of emails.entries()) users.push((await db.user.create({ data: { name: `UX Operator ${index}`, email, password: hash } })).id);
+});
+test.afterAll(async () => {
+  await db.handoverRead.deleteMany({ where: { userId: { in: users } } });
+  await db.operationEntry.deleteMany({ where: { authorId: { in: users } } });
+  await db.shift.deleteMany({ where: { userId: { in: users } } });
+  await db.user.deleteMany({ where: { id: { in: users } } }); await db.$disconnect();
+});
+async function login(page: Page, index = 0) {
+  await page.locator("#email").fill(emails[index]!); await page.locator("#password").fill(password); await page.locator("#login-button").click();
+  await expect(page.locator("#summary-units .unit-status")).toHaveCount(3);
+}
+async function expire(page: Page) {
+  await page.route(/\/operations\/entries\?view=open/, route => route.fulfill({ status: 401, json: { error: "Expired" } }), { times: 1 });
+  await page.locator("#refresh-operations").click();
+  await expect(page.locator("#auth-view")).toBeVisible();
+}
+test("overview acknowledgement, quick photo entry, draft protection and combined search", async ({ page }) => {
+  test.setTimeout(70000);
+  const errors: string[] = []; page.on("pageerror", error => errors.push(error.message));
+  await page.goto("/app/"); await login(page);
+  await expect(page.locator("#summary-read")).toBeDisabled();
+  await page.locator("#shift-button").click();
+  await expect(page.locator("#summary-read")).toBeEnabled();
+  await page.locator('[data-quick-kind="VALVE"]').click();
+  await expect(page.locator("#entry-kind")).toHaveValue("VALVE");
+  const title = `UX Pump ${suffix}`;
+  await page.locator("#entry-title").fill(title);
+  await page.locator("#entry-description").fill("Vana kontrolü tamamlanmalı.");
+  await page.locator('[data-quick-kind="TASK"]').click();
+  await expect(page.locator("#entry-title")).toHaveValue(title);
+  await page.locator("#entry-unit").selectOption("GT1"); await page.locator("#entry-priority").selectOption("HIGH");
+  const buffer = await sharp({ create: { width: 30, height: 20, channels: 3, background: "green" } }).png().toBuffer();
+  await page.locator("#entry-photos").setInputFiles({ name: "gallery.png", mimeType: "image/png", buffer });
+  await expect(page.locator("#camera-photo")).toHaveAttribute("capture", "environment");
+  await page.locator("#camera-photo").setInputFiles({ name: "camera.png", mimeType: "image/png", buffer });
+  await expect(page.locator("#photo-previews figure")).toHaveCount(2);
+  await page.locator("#photo-previews button").first().click();
+  await expect(page.locator("#photo-previews figure")).toHaveCount(1);
+  page.once("dialog", dialog => dialog.dismiss()); await page.locator("#logout").click();
+  await expect(page.locator("#dashboard")).toBeVisible(); await expect(page.locator("#entry-title")).toHaveValue(title);
+  const unload = page.waitForEvent("dialog");
+  const reload = page.reload({ timeout: 3000 }).catch(() => null);
+  const warning = await unload; expect(warning.type()).toBe("beforeunload"); await warning.dismiss(); await reload;
+  await expect(page.locator("#entry-title")).toHaveValue(title);
+  await page.locator("#entry-save").click();
+  await expect(page.locator("#board-entries .entry-card").filter({ hasText: title })).toHaveCount(1);
+  await expect(page.locator("#photo-previews figure")).toHaveCount(0); await expect(page.locator("#draft-hint")).toBeHidden();
+  await page.locator("#summary-read").click();
+  await expect(page.locator("#summary-read")).toBeDisabled(); await expect(page.locator("#summary-read-status")).toContainText("onaylandı");
+  await page.locator("#operations-q").fill(suffix); await page.locator("#operations-unit").selectOption("GT1");
+  await page.locator("#operations-kind").selectOption("TASK"); await page.locator("#operations-status").selectOption("open");
+  await page.locator('#operations-filter button[type="submit"]').click();
+  const result = page.locator("#operation-entries .entry-card").filter({ hasText: title }); await expect(result).toHaveCount(1);
+  await result.getByRole("button", { name: "Kaydı kapat", exact: true }).click();
+  await page.locator("#close-note").fill("Kontrol tamamlandı"); await page.locator("#close-save").click();
+  await expect(page.locator("#summary-read")).toBeEnabled();
+  await expect(page.locator("#summary-read-status")).toContainText("güncellendi");
+  await expect(result).toHaveCount(0);
+  await page.locator("#operations-status").selectOption("closed"); await page.locator('#operations-filter button[type="submit"]').click();
+  await expect(result.getByText("Kontrol tamamlandı", { exact: true })).toBeVisible();
+  await page.locator("#operations-clear").click();
+  await page.locator("#entry-title").fill("Kaydedilmemiş özel not"); await page.locator("#entry-description").fill("Aynı hesapla geri gelmeli");
+  await page.locator("#entry-photos").setInputFiles({ name: "draft.png", mimeType: "image/png", buffer });
+  await expire(page);
+  await expect(page.locator("#auth-message")).toContainText("aynı hesapla");
+  await login(page); await expect(page.locator("#entry-title")).toHaveValue("Kaydedilmemiş özel not");
+  await expect(page.locator("#photo-previews figure")).toHaveCount(1);
+  await expire(page); await login(page, 1);
+  await expect(page.locator("#entry-title")).toHaveValue(""); await expect(page.locator("#photo-previews figure")).toHaveCount(0);
+  await page.screenshot({ path: "../usability-desktop.png", fullPage: true });
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await page.screenshot({ path: "../usability-mobile.png", fullPage: true }); expect(errors).toEqual([]);
+});
+test("record search retains unit and text filters when paging", async ({ page }) => {
+  await db.operationEntry.createMany({ data: Array.from({ length: 24 }, (_, i) => ({ authorId: users[1]!, kind: "NOTE" as const, title: `Pagination ${suffix} ${i}`, description: "Search test", equipmentCode: "ST" })) });
+  await page.goto("/app/"); await login(page, 1);
+  await page.locator("#operations-q").fill(`Pagination ${suffix}`); await page.locator("#operations-unit").selectOption("ST");
+  await page.locator('#operations-filter button[type="submit"]').click();
+  await expect(page.locator("#operation-entries .entry-card")).toHaveCount(20);
+  await page.locator("#operation-next").click();
+  await expect(page.locator("#operation-entries .entry-card")).toHaveCount(4);
+  await expect(page.locator("#operations-unit")).toHaveValue("ST");
+  await expect(page.locator("#operation-page")).toContainText("21–24 / 24");
+});

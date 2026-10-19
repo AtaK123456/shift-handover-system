@@ -195,3 +195,66 @@ Yeni yolların tümü `Authorization: Bearer <token>` gerektirir:
 `GET /operations/entries?view=open|history&page=1`, `POST /operations/entries`
 (JSON veya multipart; `photos` dosya alanı), `POST /operations/entries/:id/close`,
 `GET /operations/photos/:id`.
+
+## Kullanım kolaylığı: özet, hızlı kayıt ve arama
+
+### Vardiya devralma özeti
+
+Girişte ünite durumları, tüm açık kayıtların sayısı, önemli açık kayıtlar ve son
+olay/not başlıkları gösterilir. Özet listeleri en fazla beşer başlıktır; tüm açık
+kayıtlar devir panelinden incelenir. Aktif vardiya başlatıldıktan sonra
+**Devir özetini okudum** seçilebilir. Bu işlem tüm kayıtların tek tek okunduğunu
+iddia etmez; gösterilen özetin sürümünü, verisinin kopyasını, kişiyi, vardiyayı ve okuma
+zamanını `HandoverRead` tablosuna kaydeder.
+
+Ünite güncelleme, kayıt ekleme veya kapatma işlemi aynı veritabanı transaction'ında
+ortak sürümü artırır. Özet tutarlı bir PostgreSQL snapshot'ından okunur. Eski
+sürüm onayı 409 alır; kullanıcı yeni özeti incelemelidir. Aynı kişinin aynı
+vardiyada aynı sürümü tekrar onaylaması yeni kayıt oluşturmaz. Yeni vardiyada
+önceki vardiyanın onayı kullanılmaz. Bu sürüm takibi uygulamanın API yazmaları
+üzerinden yapılır; operasyon tablolarını doğrudan SQL ile güncellemeyin.
+
+Yeni yollar: `GET /operations/summary`,
+`POST /operations/summary/read` (JSON `{ "revision": 123 }`). İkisi de JWT gerektirir;
+kimlik ve aktif vardiya sunucudan belirlenir. Eski okuma kayıtları değişmez.
+
+### Hızlı kayıt ve fotoğraf
+
+Olay, vana, iş ve dikkat kısayolları formu hazırlar; yazılmış metni silmez.
+İsteğe bağlı GT1/GT2/ST seçimi kayda ünite etiketi ekler. Eski kayıtlara tahmini
+ünite atanmaz; etiketlenmemiş kayıtlar **Genel / ortak** görünür.
+
+Fotoğraflar galeriden veya destekleyen telefonda **Fotoğraf çek** ile seçilir;
+cihaz/tarayıcı kamera seçeneği sunmuyorsa dosya seçimi kullanılabilir. Önizleme ve
+tek tek kaldırma vardır. Toplam üç fotoğraf ve fotoğraf başına 5 MB sınırı sürer.
+Tarayıcı testinde dosya seçimi/capture niyeti ve yükleme doğrulanır; fiziksel telefon
+kamerası otomasyonu bu testin kapsamında değildir.
+
+Kaydedilmemiş metin/fotoğraf varken çıkış ve sayfadan ayrılma uyarısı vardır.
+Kaydetme sırasında form düzenlemeleri kilitlenir; yeni yazılan metin yanlışlıkla
+silinmez. Oturum kesilirse taslak yalnızca mevcut sayfanın belleğinde tutulur;
+aynı hesapla yeniden girişte geri yüklenir. Başka hesapla girişte gösterilmez ve
+silinir. Tarayıcı depolarına, sunucuya veya diske otomatik taslak yazılmaz.
+Tarayıcıyı kapatıp uyarıyı kabul etmek taslağı kaybettirir; kalıcı kayıt için Kaydet
+kullanılmalıdır. Fotoğraf önizlemelerinin geçici URL'leri kaldırmada/çıkışta temizlenir.
+
+### Olay ve devir kayıtlarında arama
+
+Metin (başlık, açıklama, kapanış notu), ünite, kayıt türü, açık/kapalı durum ve
+İstanbul saatine göre dahil tarih aralığı birlikte filtrelenir. Arama tüm açık ve
+kapalı kayıtlara bakar; sayfa değiştirince filtreler korunur. Temizle normal
+olay/devir geçmişini geri getirir. Açık durum filtresi yalnızca kapatılabilir
+vana/dikkat/iş kayıtlarını getirir; olay ve genel not için durum filtresini boş bırakın.
+
+`GET /operations/entries?view=all&q=pompa&equipment=GT1&kind=TASK&status=open&from=2026-10-01&to=2026-10-31&page=1`
+
+`equipment` için GT1/GT2/ST/GENERAL; `kind` için EVENT/NOTE/VALVE/ATTENTION/TASK;
+`status` için open/closed kullanılır. Parametreler isteğe bağlıdır. Sayfa başına
+20 kayıt döner. Eski view=open/history davranışı korunur. Query değerleri
+Prisma ile parametrelenir; aramadaki `%` ve `_` joker değil düz metin olarak aranır.
+
+Güncelleme: veritabanı yedeğinden sonra `npm ci`, `npx prisma migrate deploy`,
+`npm run build`, `npm start`. Yeni `20261019000300_handover_reads_and_entry_units`
+migration'ı okuma kayıtlarını, ortak sürümü ve nullable ünite etiketini ekler;
+mevcut kayıtları silmez. Ortak tesis durumu kullanan entegrasyon testleri sırayla
+çalıştırılır.

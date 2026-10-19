@@ -56,13 +56,14 @@ test("login, start/end shift, filtered history and real Excel download", async (
   await expect(page.locator("#export-button")).toBeDisabled();
   await page.getByRole("button", { name: "Uygula", exact: true }).click();
   await expect(page.getByText("Bu tarih aralığında kayıt bulunamadı.")).toBeVisible();
-  await page.getByRole("button", { name: "Temizle", exact: true }).click();
+  await page.locator("#clear-filters").click();
   await expect(page.locator("#shift-rows tr")).toHaveCount(1);
   await page.screenshot({ path: "../frontend-desktop.png", fullPage: true });
   expect(errors).toEqual([]);
   expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
 });
 test("manager can select team records", async ({ page }) => {
+  if (!await db.shift.findFirst({ where: { userId: workerId } })) await db.shift.create({ data: { userId: workerId, status: "COMPLETED", endTime: new Date() } });
   await login(page, managerEmail);
   await expect(page.locator("#scope-field")).toBeVisible();
   await page.getByLabel("Kayıtlar", { exact: true }).selectOption("all");

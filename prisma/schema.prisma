@@ -39,6 +39,7 @@ model User {
   closedEntries OperationEntry[] @relation("EntryCloser")
   equipmentUpdates Equipment[]
   equipmentChanges EquipmentChange[]
+  readReceipts HandoverRead[]
   handoversFrom Handover[] @relation("HandoverFrom")
   handoversTo   Handover[] @relation("HandoverTo")
 }
@@ -54,6 +55,7 @@ model Shift {
   handovers  Handover[]
   reports    Report[]
   operationEntries OperationEntry[]
+  readReceipts HandoverRead[]
   shiftDate String?
   scheduledStart String?
   scheduledEnd String?
@@ -122,6 +124,7 @@ model Equipment {
   updatedById Int?
   updatedBy User? @relation(fields: [updatedById], references: [id])
   changes EquipmentChange[]
+  entries OperationEntry[]
 }
 
 model EquipmentChange {
@@ -152,6 +155,9 @@ model OperationEntry {
   closedBy User? @relation("EntryCloser", fields: [closedById], references: [id])
   closeNote String?
   photos OperationPhoto[]
+  equipmentCode String?
+  equipment Equipment? @relation(fields: [equipmentCode], references: [code])
+  @@index([equipmentCode, createdAt])
   @@index([closedAt, kind, createdAt])
 }
 
@@ -161,4 +167,22 @@ model OperationPhoto {
   entry OperationEntry @relation(fields: [entryId], references: [id], onDelete: Cascade)
   data Bytes
   createdAt DateTime @default(now())
+}
+
+
+model OperationRevision {
+  id Int @id
+  version Int @default(0)
+}
+
+model HandoverRead {
+  id Int @id @default(autoincrement())
+  userId Int
+  user User @relation(fields: [userId], references: [id])
+  shiftId Int
+  shift Shift @relation(fields: [shiftId], references: [id])
+  revision Int
+  readAt DateTime @default(now())
+  snapshot Json
+  @@unique([userId, shiftId, revision])
 }
