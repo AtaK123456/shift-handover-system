@@ -11,9 +11,10 @@
     document.documentElement.dataset.theme = theme;
     document.querySelector('meta[name="theme-color"]')?.setAttribute("content", dark ? "#111c19" : "#f6f7f4");
     document.querySelectorAll("[data-theme-toggle]").forEach(button => {
-      button.textContent = window.appI18n ? window.appI18n.t(dark ? "light" : "dark") : dark ? "Açık mod" : "Koyu mod";
-      button.setAttribute("aria-label", window.appI18n ? window.appI18n.t(dark ? "lightLabel" : "darkLabel") : dark ? "Açık moda geç" : "Koyu moda geç");
-      button.setAttribute("aria-pressed", String(dark));
+      const translate = window.appI18n?.t;
+      button.setAttribute("aria-label", translate ? translate("darkTheme") : "Koyu tema");
+      button.setAttribute("aria-checked", String(dark));
+      button.title = translate ? translate(dark ? "lightLabel" : "darkLabel") : dark ? "Açık moda geç" : "Koyu moda geç";
     });
   }
   apply();
