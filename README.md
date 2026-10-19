@@ -148,8 +148,8 @@ yönetici görünümü, mobil taşma ve çıkış akışları kontrol edilir.
 
 ### Açık / koyu tema
 
-Giriş/kayıt ekranındaki ve panelin üst kısmındaki **Koyu mod / Açık mod** düğmesi
-ile görünümü değiştirebilirsiniz. İlk açılışta cihazınızın tema tercihi kullanılır.
+Giriş/kayıt ekranındaki ve panelin üst kısmındaki **güneş/ay simgeli tema anahtarı**
+ile görünümü değiştirebilirsiniz. **文 / A** simgesi Türkçe/English seçimini açar. İlk açılışta cihazınızın tema tercihi kullanılır.
 Elle seçilen tema yalnızca `vardiya-theme` anahtarıyla tarayıcıda saklanır;
 sayfa yenilenince, ekran değiştirince ve çıkış yapınca korunur. Şifre ve token
 bu tercihle birlikte kaydedilmez. Tarayıcı depolaması kapalıysa tema o sayfada

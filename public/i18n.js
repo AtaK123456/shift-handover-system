@@ -1,4 +1,5 @@
 const messages = {
+  chooseLanguage:["Dil seç","Choose language"],darkTheme:["Koyu tema","Dark theme"],
   brand:["Vardiya Defteri","Shift Logbook"], tagline:["VARDİYA VE DEVİR TAKİBİ","SHIFT & HANDOVER TRACKING"],
   storyTitle:["Her vardiya, eksiksiz bir devir.","Every shift. A complete handover."],storyText:["Ünitelerin durumunu takip et. Olayları kaydet. Devam eden işleri bir sonraki vardiyaya aktar.","Track unit status, record events, and pass ongoing work to the next shift."],
   loginTitle:["Tekrar hoş geldin.","Welcome back."],loginDescription:["Vardiya ve devir kayıtlarına erişmek için giriş yap.","Sign in to access shift and handover records."],signupTitle:["Birlikte başlayalım.","Let's get started."],signupDescription:["Kendi hesabını oluştur.","Create your account."],name:["Ad soyad","Full name"],email:["E-posta adresi","Email address"],password:["Şifre","Password"],passwordHint:["En az 12 karakter kullan.","Use at least 12 characters."],login:["Giriş yap","Sign in"],signup:["Hesap oluştur","Create account"],noAccount:["Henüz hesabın yok mu?","Don't have an account?"],hasAccount:["Zaten hesabın var mı?","Already have an account?"],show:["Göster","Show"],hide:["Gizle","Hide"],showPassword:["Şifreyi göster","Show password"],hidePassword:["Şifreyi gizle","Hide password"],logout:["Çıkış yap","Sign out"],dark:["Koyu mod","Dark mode"],light:["Açık mod","Light mode"],darkLabel:["Koyu moda geç","Switch to dark mode"],lightLabel:["Açık moda geç","Switch to light mode"],
@@ -34,7 +35,11 @@ function apply() {
   document.documentElement.lang = language;
   document.title = t("brand");
   document.querySelectorAll("[data-i18n]").forEach(el => { el.textContent = t(el.dataset.i18n); });
-  document.querySelectorAll("[data-language]").forEach(select => { select.value = language; });
+  document.querySelectorAll("[data-language]").forEach(select => {
+    select.value = language;
+    select.setAttribute("aria-label", t("chooseLanguage"));
+    select.closest(".language-control").title = `${t("chooseLanguage")} · ${language === "en" ? "English" : "Türkçe"}`;
+  });
 }
 export function initializeLanguage() {
   apply();
