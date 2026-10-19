@@ -1,260 +1,327 @@
-# Vardiya takip API
+# Shift Handover System
 
-Express 5, TypeScript, Prisma 7.10.1 ve PostgreSQL tabanlı vardiya takip servisi.
+A shift tracking and plant handover application built with Express 5, TypeScript,
+Prisma 7.10.1, and PostgreSQL. The browser interface supports Turkish and English.
 
-## Kurulum
+## Setup
 
-Node.js 22.12+ (22 serisi) veya 24 ve üzeri kullanın.
+Use Node.js 22.12+ (22.x) or Node.js 24 or later.
 
 ```sh
 npm ci
 cp .env.example .env
 ```
 
-`.env` içinde kendi PostgreSQL bağlantınızı ve en az 32 baytlık rastgele
-`JWT_SECRET` değerini tanımlayın. Anahtar üretmek için:
+On Windows PowerShell, use `Copy-Item .env.example .env` instead of `cp`.
+Set your PostgreSQL connection string as `DATABASE_URL` in `.env`, and set
+`JWT_SECRET` to a random secret of at least 32 bytes. Generate a secret with:
 
 ```sh
 node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"
+```
+
+Then run each command in order, continuing only when the previous command succeeds:
+
+```sh
 npx prisma migrate deploy
 npm run build
 npm start
 ```
 
-Geliştirme: `npm run dev`. Kontroller: `npm test` ve `npm run typecheck`.
-Prisma komutları için `DATABASE_URL` tanımlı olmalıdır. Testler üretilmiş Prisma
-istemcisi gerektirir (`npx prisma generate`); testlerde gerçek veritabanı kullanılmaz.
+For development, use `npm run dev`. Open **http://localhost:3000/app/**.
+The root URL `/` also redirects to this page. The frontend lives in `public/`
+and runs on the same server as the API; no separate frontend installation or build is needed.
 
-## Güvenlik davranışı
+Prisma commands require `DATABASE_URL`. Unit tests require a generated Prisma
+client (`npx prisma generate`), but do not use a real database.
 
-- `/register` geçerli e-posta, 1–100 karakter isim ve en az 12 karakter/en çok
-  256 bayt şifre bekler; yalnızca `WORKER` oluşturur. Mevcut kısa şifrelerle giriş korunur.
-- `/login` ve `/register` için IP başına 15 dakikada sırasıyla 20 ve 10 istek sınırı vardır.
-- `/users` yalnızca güncel veritabanı rolü `MANAGER` olan kullanıcılara açıktır.
-- Vardiya yolları yalnızca token ile doğrulanan kullanıcının kendi kimliğini kullanır.
-- JWT yalnızca HS256 kabul eder ve 8 saat geçerlidir. Rol her istekte veritabanından okunur.
-- Eski salt:scrypt şifre kayıtları ve süreli HS256 tokenları aynı anahtarla çalışmaya devam eder.
-- İstek gövdeleri 16 KB ile sınırlıdır. İç hata ayrıntıları istemciye döndürülmez.
+### Windows installation troubleshooting
 
-## Dağıtım ve kalan işler
+Stop the project's running development server with Ctrl+C before `npm ci`.
+An `EPERM` error removing `esbuild.exe` usually means a running process has locked
+the file. Stop that process, or restart Windows and retry `npm ci` before starting
+the application. Do not continue to migration or build commands until installation
+succeeds. A failed installation can leave local `prisma` and `tsx` commands missing.
+Do not accept an unrelated Prisma version offered by `npx` after a failed install.
+After installation succeeds, `.\node_modules\.bin\prisma.cmd migrate deploy`
+explicitly uses the project's local CLI in PowerShell.
 
-- Trafiği HTTPS üzerinden sunun. Tokenları günlük kayıtlarına yazmayın.
-- Hız sınırı bu aşamada süreç belleğinde tutulur. Birden fazla uygulama örneğinde
-  paylaşımlı bir depo kullanın. Reverse proxy varsa `trust proxy` değerini yalnızca
-  gerçek proxy topolojisine göre yapılandırın; istemci IP başlıklarına körü körüne güvenmeyin.
-- Herkese açık kayıt mevcut davranış olarak korunur. Davet/onay ve e-posta doğrulaması henüz yoktur.
-- Normal çıkış veya şifre değişikliğinde token iptali henüz yoktur; token süresi 8 saattir.
-- Aynı kullanıcıya eşzamanlı `/shifts/start` isteklerinde veritabanı yalnızca bir
-  aktif vardiyaya izin verir; diğerleri `409` alır. Tamamlanmış vardiyalar sınırsız kalır.
-- Koşullu indeks Prisma şemasında `partialIndexes` önizleme özelliğiyle tanımlıdır;
-  migration da aynı indeksi oluşturur. İndeksi kaldırmayın veya koşulsuz `userId`
-  benzersizliğiyle değiştirmeyin; bu, geçmiş vardiya kayıtlarını engeller.
-- Listeleme sayfalaması ve üretim hata izleme ayrıca ele alınmalıdır.
-- Prisma istemcisi, CLI ve PostgreSQL adaptörü 7.10.1 sürümüne yükseltildi.
-  Bağlantı artık `src/database.ts` içindeki `PrismaPg` adaptörüyle kurulur;
-  CLI bağlantısı `prisma.config.ts` içinden gelir. Tarama sırasında `npm audit`
-  sıfır bildirim raporladı; bu sonuç yeni bildirimlerle değişebilir.
+## Security behavior
 
-## Mevcut kurulumun güncellenmesi
+- `/register` requires a valid email address, a name of 1–100 characters, and a
+  password of at least 12 characters and at most 256 bytes. It only creates
+  `WORKER` accounts. Existing accounts with shorter passwords can still log in.
+- `/login` and `/register` allow 20 and 10 requests per IP address per 15 minutes,
+  respectively.
+- `/users` requires the user's current database role to be `MANAGER`.
+- Shift endpoints use the identity of the authenticated user from the token.
+- JWTs accept only HS256 and expire after 8 hours. The current user role is read
+  from the database on each authenticated request.
+- Existing salt:scrypt password records and expiring HS256 tokens continue to
+  work with the same secret.
+- JSON request bodies are limited to 16 KB. Internal error details are not
+  returned to clients. Photo uploads have separate multipart limits.
 
-Veritabanınızın yedeğini alın. Önce mükerrer aktif vardiyaları inceleyin:
+## Deployment and remaining work
+
+- Serve production traffic over HTTPS. Do not log tokens.
+- Rate limits currently use process memory. Use a shared store for multiple
+  application instances. Configure `trust proxy` only for the actual reverse
+  proxy topology; do not blindly trust client IP headers.
+- Public registration remains available. Invitations, approval, and email
+  verification have not been implemented.
+- Logout and password changes do not yet revoke issued tokens; tokens expire
+  after 8 hours.
+- Concurrent `/shifts/start` requests for the same user can create only one
+  active shift; other requests receive `409`. Completed shift history is retained.
+- The conditional unique index uses Prisma's `partialIndexes` preview feature
+  and is also created by the migration. Do not remove it or replace it with
+  unconditional uniqueness on `userId`, which would prevent shift history.
+- Lists are paginated. Production error monitoring remains to be configured.
+- Prisma's client, CLI, and PostgreSQL adapter use version 7.10.1. Runtime
+  connections use `PrismaPg` in `src/database.ts`; CLI connections are configured
+  in `prisma.config.ts`. The last audit reported no vulnerabilities; future
+  advisories may change that result.
+
+## Updating an existing installation
+
+Back up the database. First check for duplicate active shifts:
 
 ```sql
 SELECT "userId", COUNT(*) FROM "Shift"
 WHERE "status" = 'ACTIVE' GROUP BY "userId" HAVING COUNT(*) > 1;
 ```
 
-Migration mükerrer kayıt bulursa hiçbir vardiyayı silmeden veya kapatmadan durur.
-Hangi kayıtların kapatılacağını iş kurallarına göre belirleyip düzelttikten sonra,
-yalnızca başarısız migration için aşağıdaki komutla yeniden denemeye izin verin:
+If duplicates exist, the migration stops without deleting or closing any shift.
+Decide which records to close according to your business rules and correct them.
+Only if this migration has failed, mark that failed migration as rolled back
+before retrying:
 
 ```sh
 npx prisma migrate resolve --rolled-back 20261019000100_one_active_shift_per_user
 npx prisma migrate deploy
 ```
 
-Yeni sürümü devreye almadan önce `npm ci`, `npx prisma migrate deploy` ve
-`npm run build` çalıştırın. Migration tablo yazmalarını geçici olarak kilitler;
-kilidi 10 saniyede alamazsa işlemi durdurur. Büyük veritabanlarında bakım zamanı planlayın.
+For normal updates, stop the development server, then run these commands one at a time:
 
-## PostgreSQL entegrasyon testleri
+```sh
+npm ci
+npx prisma migrate deploy
+npm run build
+npm start
+```
 
-Yalnızca test için ayrılmış, silinebilen bir PostgreSQL veritabanı kullanın.
-`DATABASE_URL` ve `TEST_DATABASE_URL` bu test veritabanını göstermelidir.
-Migration uygulandıktan sonra:
+The unique-index migration temporarily locks table writes and stops if it cannot
+acquire the lock within 10 seconds. Schedule a maintenance window for large databases.
+Migration `20261019000200_operations_handover` adds equipment, entry, and photo
+tables, seeds GT1/GT2/ST, and adds nullable shift schedule fields.
+The handover migrations add tables and nullable shift fields without deleting
+existing users, shifts, or operation records. Photos are stored in PostgreSQL
+and are included in database backups.
+
+## Tests
+
+Unit/API checks:
+
+```sh
+npm test
+npm run typecheck
+```
+
+### PostgreSQL integration tests
+
+Use a disposable PostgreSQL database dedicated to tests. Both `DATABASE_URL` and
+`TEST_DATABASE_URL` must point to that database. Apply migrations, then run:
 
 ```sh
 npm run test:integration
 ```
 
-Bu testler iki bağımsız Prisma istemcisi/API örneğinden 12 eşzamanlı başlangıçta
-bir `201`, diğerlerinde `409`; 8 eşzamanlı bitirmede bir `200`, diğerlerinde `404`
-bekler. Doğrudan veritabanı yazarı da aynı kısıta tabidir. Ayrıca başka bir kullanıcının
-vardiyası, tamamlanmış vardiya geçmişi ve mükerrer veri bulunan migration'ın
-hiçbir kayıt değiştirmeden durması doğrulanır. Testlerin oluşturduğu kayıtlar temizlenir.
+The concurrency tests use two independent Prisma clients/API instances. Twelve
+concurrent starts must produce one `201` and otherwise `409`; eight concurrent
+ends must produce one `200` and otherwise `404`. Direct database writes are
+subject to the same uniqueness constraint. Tests also cover another user's shift,
+completed history, and a migration stopping on duplicate data without changing records.
+Test-created records are cleaned up.
 
-## Web arayüzü ve Excel
+Handover tests cover shared records, authorized photos, equipment update conflicts,
+immutable closure details, versioned summaries, idempotent/concurrent acknowledgments,
+stale-version rejection, authenticated actor selection, combined filters, and pagination.
+Tests that share plant state run sequentially.
 
-Uygulama başladıktan sonra **http://localhost:3000/app/** adresini açın.
-Ana adres `/` de bu ekrana yönlendirir. Frontend `public/` klasöründedir ve
-API ile aynı sunucudan çalışır; ayrı frontend kurulumu veya derlemesi gerekmez.
+### Browser tests
 
-- Giriş yapın veya hesap oluşturun. Yeni hesaplar ÇALIŞAN (`WORKER`) rolündedir.
-- Üstteki karttan vardiyayı başlatın/bitirin; saatler otomatik kaydedilir.
-- Geçmiş listesinde tarihler seçip **Uygula** düğmesine basın.
-- **Excel’e aktar**, uygulanan filtredeki tüm kayıtları indirir; yalnızca görünen
-  sayfayı indirmez. Tarihleri boş bırakırsanız tüm tarihler seçilir.
-- Yönetici rolünde **Kayıtlar → Tüm personel** seçeneği görünür. Diğer roller
-  yalnızca kendi vardiyalarını görebilir ve indirebilir.
-
-Excel dosyasında vardiya no, personel no/ad/e-posta, başlangıç, bitiş, durum, vardiya tarihi ve seçilen vardiya saatleri vardır. Tarihler vardiyanın başlangıcına göre ve İstanbul
-saatinde süzülür; iki uç tarih de dahildir. Aktif vardiyanın gerçek bitişi boş kalır. Dosya en fazla 5.000 satır içerir; sınır aşılırsa kayıtlar
-kesilmeden hata verilir ve tarih aralığını daraltmanız istenir. Boş sonuçta da
-başlıkları olan geçerli bir dosya indirilir. Kullanıcı metinleri Excel formülü
-olarak değerlendirilmez. Şifre ve JWT verileri dosyaya dahil edilmez.
-
-Token yalnızca sayfa belleğinde saklanır; sayfayı yenilemek yeniden giriş
-gerektirir. Tarayıcı depolarına yazılmaz. Excel indirmesi IP başına 15 dakikada
-5 istekle sınırlıdır. Üretimde HTTPS kullanın.
-
-### Yeni API yolları
-
-`Authorization: Bearer <token>` gerektirir:
-
-- `GET /shifts?from=2026-10-01&to=2026-10-31&scope=own&page=1`
-  → `{ items, total, page, pageSize }`, sayfa başına 20 kayıt, en yeni önce.
-- `GET /shifts/export?from=2026-10-01&to=2026-10-31&scope=own`
-  → `.xlsx` eki, başlangıç tarihine göre eskiden yeniye.
-
-`scope=own` varsayılandır. `scope=all` yalnızca güncel veritabanı rolü MANAGER
-olan kullanıcıya açıktır. Tarihler isteğe bağlıdır; `YYYY-AA-GG` biçimindedir.
-ExcelJS içindeki uuid alt bağımlılığı, CommonJS uyumlu ve güvenlik düzeltmesini
-içeren 11.1.1 sürümüne sabitlenmiştir.
-
-### Tarayıcı testleri
-
-Önce `npm run build` ve test veritabanı migration'larını çalıştırın.
-Test için ayrılmış PostgreSQL bağlantısını `TEST_DATABASE_URL` olarak tanımlayın:
+Run `npm run build` and apply migrations to the test database first. Set
+`TEST_DATABASE_URL` to that dedicated PostgreSQL database, then run:
 
 ```sh
 npx playwright install chromium
 npm run test:e2e
 ```
 
-İstenirse sistem Chromium yolu `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` ile verilir.
-Testler kendi yerel sunucusunu başlatır ve durdurur; 3000 portu boş olmalıdır.
-Giriş/kayıt, vardiya başlatma/bitirme, filtreleme, gerçek Excel indirmesi,
-yönetici görünümü, mobil taşma ve çıkış akışları kontrol edilir.
+Optionally set `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` to a system Chromium binary.
+Tests start and stop their own local server; port 3000 must be available.
+They cover authentication, shift actions, filtering, real Excel downloads,
+manager access, mobile overflow, themes, photos, handover acknowledgments,
+unsaved changes, and account-specific draft restoration.
 
-### Açık / koyu tema
+## Web interface and Excel
 
-Giriş/kayıt ekranındaki ve panelin üst kısmındaki **güneş/ay simgeli tema anahtarı**
-ile görünümü değiştirebilirsiniz. **文 / A** simgesi Türkçe/English seçimini açar. İlk açılışta cihazınızın tema tercihi kullanılır.
-Elle seçilen tema yalnızca `vardiya-theme` anahtarıyla tarayıcıda saklanır;
-sayfa yenilenince, ekran değiştirince ve çıkış yapınca korunur. Şifre ve token
-bu tercihle birlikte kaydedilmez. Tarayıcı depolaması kapalıysa tema o sayfada
-çalışmaya devam eder; sonraki açılışta cihaz tercihi kullanılır.
+- Log in or create an account. New accounts have the `WORKER` role.
+- Start or end a shift from the top card. Actual start and end times are recorded.
+- Choose dates in shift history and press **Apply**.
+- **Export to Excel** downloads every record matching the applied filters,
+  rather than only the visible page. Empty date fields include all dates.
+- Managers can select **Records → All staff**. Other roles can only view and
+  export their own shifts.
 
-## Tesis devir paneli
+The workbook includes shift ID, staff ID/name/email, actual start and end,
+status, shift date, and selected shift hours. Dates filter by actual shift start
+in the Istanbul time zone, including both boundary dates. Active shifts have
+an empty actual end time. Exports are limited to 5,000 rows; exceeding the limit
+returns an error requesting a narrower date range instead of silently truncating
+results. Empty results still produce a valid workbook with headers. User text
+is not interpreted as Excel formulas. Passwords and JWTs are excluded.
 
-- GT1/GT2 gaz türbinleri ve ST buhar türbini için **Belirtilmedi / Devrede /
-  Devre dışı / Bakımda** seçilir; durum notu, güncelleyen kişi ve zaman görünür.
-  Durumlar manuel kayıttır; yeni kurulumda hiçbir ünite otomatik olarak devrede
-  kabul edilmez. Değişiklikler EquipmentChange tablosunda saklanır; eski sürüm
-  üzerinden güncelleme 409 döner ve yenileme gerektirir.
-- **Olay / Not / Aktif vana / Dikkat edilecek konu / Devam eden iş** kayıtları
-  başlık, açıklama ve önem derecesiyle oluşturulur. Açık vana/dikkat/iş kayıtları
-  vardiya bitince kaybolmaz; biri kapatana kadar ortak devir panelinde kalır.
-  Kapanış notu, kapatan kişi ve tarih saklanır; geçmiş kayıt silinmez. Olay/not
-  türleri doğrudan geçmiş bölümünde görünür.
-- Bu sürüm tek tesis içindir. Tüm giriş yapan roller ortak tesis durumlarını ve
-  devir kayıtlarını görür; kayıt ekleyebilir, ünite durumu güncelleyebilir ve açık
-  işleri kapatabilir. Kişisel vardiya listesi/Excel için önceki rol kısıtları sürer.
-- Bir kayda en fazla 3 JPEG/PNG/WebP fotoğraf (her biri en fazla 5 MB) eklenir.
-  Görsel gerçek içerikten doğrulanır, en fazla 1600x1600'e küçültülüp JPEG'e
-  dönüştürülür; EXIF korunmaz. Fotoğraflar PostgreSQL'de saklanır ve yedeklemeye
-  dahildir. Fotoğraf URL'si de JWT doğrulaması gerektirir; herkese açık dosya
-  servisi yoktur. Görseller indirildiğinde sayfada geçici blob URL'si kullanılır.
-- Ortak panel 30 saniyede bir yenilenir; **Yenile** ile hemen güncellenir.
-- Vardiya tarihi ve 00:00–08:00 / 08:00–16:00 / 16:00–00:00 aralıklarından biri
-  başlangıçta seçilir. Tarih, aralığın başladığı gündür; 16:00–00:00 vardiyası
-  ertesi gün biter. Gerçek giriş/çıkış saati ayrıca saklanır. Geçen süre kaldırıldı.
-  Eski kayıtlara saat aralığı uydurulmaz; belirtilmemiş olarak görünür.
-- Türkçe/English seçimi giriş ve panelde bulunur, `vardiya-language` tercihi
-  tarayıcıda korunur. Arayüz ve Excel başlıkları çevrilir; operatörün kendi
-  yazdığı notlar otomatik çevrilmez. Saat dilimi her iki dilde İstanbul'dur.
+Tokens stay only in page memory; refreshing requires logging in again. Tokens
+are not written to browser storage. Excel downloads allow 5 requests per IP
+address per 15 minutes.
 
-### Güncelleme
+### Shift list and export endpoints
 
-Veritabanını yedekleyin; yeni tablolar ve nullable vardiya alanları için
-`npx prisma migrate deploy` çalıştırın, ardından `npm run build` ve `npm start`.
-Bu migration mevcut vardiya, olay veya kullanıcı kayıtlarını silmez.
+These endpoints require `Authorization: Bearer <token>`:
 
-Yeni yolların tümü `Authorization: Bearer <token>` gerektirir:
-`GET /operations/equipment`, `PUT /operations/equipment/:code`,
-`GET /operations/entries?view=open|history&page=1`, `POST /operations/entries`
-(JSON veya multipart; `photos` dosya alanı), `POST /operations/entries/:id/close`,
-`GET /operations/photos/:id`.
+- `GET /shifts?from=2026-10-01&to=2026-10-31&scope=own&page=1`
+  returns `{ items, total, page, pageSize }`, with 20 records per page, newest first.
+- `GET /shifts/export?from=2026-10-01&to=2026-10-31&scope=own`
+  returns an `.xlsx` attachment ordered by start time, oldest first.
 
-## Kullanım kolaylığı: özet, hızlı kayıt ve arama
+`scope=own` is the default. `scope=all` requires the current database role
+`MANAGER`. Dates are optional and use `YYYY-MM-DD` format.
+ExcelJS's transitive uuid dependency is pinned to the CommonJS-compatible
+version 11.1.1, which includes the security fix.
 
-### Vardiya devralma özeti
+### Language and theme
 
-Girişte ünite durumları, tüm açık kayıtların sayısı, önemli açık kayıtlar ve son
-olay/not başlıkları gösterilir. Özet listeleri en fazla beşer başlıktır; tüm açık
-kayıtlar devir panelinden incelenir. Aktif vardiya başlatıldıktan sonra
-**Devir özetini okudum** seçilebilir. Bu işlem tüm kayıtların tek tek okunduğunu
-iddia etmez; gösterilen özetin sürümünü, verisinin kopyasını, kişiyi, vardiyayı ve okuma
-zamanını `HandoverRead` tablosuna kaydeder.
+The compact **文 / A** control opens the Turkish/English selector on both the
+authentication screen and dashboard. Interface text and Excel headers are
+translated; operator-written notes are not automatically translated. Both
+languages use the Istanbul time zone. The `vardiya-language` preference is
+stored in the browser.
 
-Ünite güncelleme, kayıt ekleme veya kapatma işlemi aynı veritabanı transaction'ında
-ortak sürümü artırır. Özet tutarlı bir PostgreSQL snapshot'ından okunur. Eski
-sürüm onayı 409 alır; kullanıcı yeni özeti incelemelidir. Aynı kişinin aynı
-vardiyada aynı sürümü tekrar onaylaması yeni kayıt oluşturmaz. Yeni vardiyada
-önceki vardiyanın onayı kullanılmaz. Bu sürüm takibi uygulamanın API yazmaları
-üzerinden yapılır; operasyon tablolarını doğrudan SQL ile güncellemeyin.
+The **sun/moon theme switch** changes between light and dark mode. On first use,
+the device preference is used. A manual choice is stored under `vardiya-theme`
+and survives refreshes, screen changes, and logout. Passwords and tokens are
+not stored with this preference. If browser storage is unavailable, the theme
+still works for the current page and falls back to the device preference next time.
 
-Yeni yollar: `GET /operations/summary`,
-`POST /operations/summary/read` (JSON `{ "revision": 123 }`). İkisi de JWT gerektirir;
-kimlik ve aktif vardiya sunucudan belirlenir. Eski okuma kayıtları değişmez.
+## Plant handover dashboard
 
-### Hızlı kayıt ve fotoğraf
+- GT1/GT2 gas turbines and the ST steam turbine support **Unspecified / Active /
+  Inactive / Maintenance** status, with a note, updater, and timestamp. Status
+  is entered manually; no unit is assumed active on a new installation. Changes
+  are retained in `EquipmentChange`. Updates based on an outdated version return
+  `409` and require refreshing.
+- **Event / Note / Active valve / Attention item / Ongoing task** records include
+  a title, description, and priority. Open valve, attention, and task records
+  remain on the shared handover board across shifts until someone closes them.
+  Closure notes, actor, and time are retained in history. Events and notes appear
+  directly in history.
+- This release supports one plant. All authenticated roles can view shared
+  equipment and handover records, create entries, update equipment status, and
+  close open work. Personal shift lists and exports retain their role restrictions.
+- Each entry accepts up to 3 JPEG/PNG/WebP photos, each at most 5 MB. Actual image
+  contents are validated, resized to at most 1600×1600, and converted to JPEG
+  without EXIF metadata. Photos are stored in PostgreSQL. Photo endpoints also
+  require JWT authentication; files are not publicly served. The page uses
+  temporary blob URLs after authenticated downloads.
+- The shared dashboard refreshes every 30 seconds, or immediately with **Refresh**.
+- When starting a shift, choose its date and **00:00–08:00 / 08:00–16:00 /
+  16:00–00:00** schedule. The date is the day the scheduled interval starts;
+  16:00–00:00 ends the next day. Actual start/end times are recorded separately.
+  No elapsed-time counter is shown. Existing shifts without a schedule remain
+  unspecified rather than receiving an assumed interval.
 
-Olay, vana, iş ve dikkat kısayolları formu hazırlar; yazılmış metni silmez.
-İsteğe bağlı GT1/GT2/ST seçimi kayda ünite etiketi ekler. Eski kayıtlara tahmini
-ünite atanmaz; etiketlenmemiş kayıtlar **Genel / ortak** görünür.
+All operation endpoints require `Authorization: Bearer <token>`:
 
-Fotoğraflar galeriden veya destekleyen telefonda **Fotoğraf çek** ile seçilir;
-cihaz/tarayıcı kamera seçeneği sunmuyorsa dosya seçimi kullanılabilir. Önizleme ve
-tek tek kaldırma vardır. Toplam üç fotoğraf ve fotoğraf başına 5 MB sınırı sürer.
-Tarayıcı testinde dosya seçimi/capture niyeti ve yükleme doğrulanır; fiziksel telefon
-kamerası otomasyonu bu testin kapsamında değildir.
+- `GET /operations/equipment`
+- `PUT /operations/equipment/:code`
+- `GET /operations/entries?view=open|history&page=1`
+- `POST /operations/entries` (JSON or multipart; photo field: `photos`)
+- `POST /operations/entries/:id/close`
+- `GET /operations/photos/:id`
 
-Kaydedilmemiş metin/fotoğraf varken çıkış ve sayfadan ayrılma uyarısı vardır.
-Kaydetme sırasında form düzenlemeleri kilitlenir; yeni yazılan metin yanlışlıkla
-silinmez. Oturum kesilirse taslak yalnızca mevcut sayfanın belleğinde tutulur;
-aynı hesapla yeniden girişte geri yüklenir. Başka hesapla girişte gösterilmez ve
-silinir. Tarayıcı depolarına, sunucuya veya diske otomatik taslak yazılmaz.
-Tarayıcıyı kapatıp uyarıyı kabul etmek taslağı kaybettirir; kalıcı kayıt için Kaydet
-kullanılmalıdır. Fotoğraf önizlemelerinin geçici URL'leri kaldırmada/çıkışta temizlenir.
+## Handover overview, quick entry, and search
 
-### Olay ve devir kayıtlarında arama
+### Handover overview and acknowledgment
 
-Metin (başlık, açıklama, kapanış notu), ünite, kayıt türü, açık/kapalı durum ve
-İstanbul saatine göre dahil tarih aralığı birlikte filtrelenir. Arama tüm açık ve
-kapalı kayıtlara bakar; sayfa değiştirince filtreler korunur. Temizle normal
-olay/devir geçmişini geri getirir. Açık durum filtresi yalnızca kapatılabilir
-vana/dikkat/iş kayıtlarını getirir; olay ve genel not için durum filtresini boş bırakın.
+The overview shows equipment status, total open and important record counts,
+important open titles, and recent event/note titles. Each title list contains
+at most five items; use the handover board to review all open records.
+After starting an active shift, select **I have read the handover summary**.
+This records the displayed summary's revision and data snapshot, user, shift,
+and acknowledgment time in `HandoverRead`. It does not claim that every detailed
+record has been read.
 
-`GET /operations/entries?view=all&q=pompa&equipment=GT1&kind=TASK&status=open&from=2026-10-01&to=2026-10-31&page=1`
+Equipment updates, new entries, and closures increment a shared revision within
+the same database transaction. The summary uses a consistent PostgreSQL snapshot.
+Acknowledging an outdated revision returns `409` and requires reviewing the new
+summary. Repeating the same acknowledgment for the same user, shift, and revision
+does not create another record. A new shift cannot reuse the previous shift's
+acknowledgment. Revision tracking depends on application API writes; do not
+update operation tables directly through SQL.
 
-`equipment` için GT1/GT2/ST/GENERAL; `kind` için EVENT/NOTE/VALVE/ATTENTION/TASK;
-`status` için open/closed kullanılır. Parametreler isteğe bağlıdır. Sayfa başına
-20 kayıt döner. Eski view=open/history davranışı korunur. Query değerleri
-Prisma ile parametrelenir; aramadaki `%` ve `_` joker değil düz metin olarak aranır.
+Endpoints: `GET /operations/summary` and `POST /operations/summary/read`
+(JSON `{ "revision": 123 }`). Both require JWT authentication. The server selects
+the user and active shift. Previous acknowledgment records remain unchanged.
 
-Güncelleme: veritabanı yedeğinden sonra `npm ci`, `npx prisma migrate deploy`,
-`npm run build`, `npm start`. Yeni `20261019000300_handover_reads_and_entry_units`
-migration'ı okuma kayıtlarını, ortak sürümü ve nullable ünite etiketini ekler;
-mevcut kayıtları silmez. Ortak tesis durumu kullanan entegrasyon testleri sırayla
-çalıştırılır.
+### Quick entries and photos
+
+Event, valve, task, and attention shortcuts prepare the form without deleting
+existing text. Optional GT1/GT2/ST selection tags an entry with its equipment.
+Older or untagged entries appear as **General / shared**.
+
+Choose photos from the gallery or use **Take photo** on a supported phone.
+If the device/browser does not offer a camera, use file selection. Photos have
+previews and can be removed individually. The limits remain three photos total,
+5 MB per photo. Browser tests verify file selection, the capture attribute, and
+uploads; physical phone camera automation is outside their scope.
+
+Unsaved text/photos trigger a warning on logout or leaving the page. Form edits
+are disabled while saving so newly entered text cannot be accidentally cleared.
+If the session expires, the draft stays only in the current page's memory and
+is restored after logging in to the same account. Logging in to another account
+discards it without displaying it. Drafts are not automatically persisted to
+browser storage, the server, or disk. Accepting the warning and closing the page
+loses the draft; use **Save** for a permanent record. Temporary photo preview URLs
+are released when removed or on logout.
+
+### Search events and handover records
+
+Combine text (title, description, closure note), equipment, record type,
+open/closed status, and an inclusive Istanbul date range. Search includes open
+and closed records and retains filters when paging. **Clear** restores the
+normal event/handover history. The open-status filter only returns closable
+valve, attention, and task entries; leave status empty for events and general notes.
+Search filters do not hide records from the separate open handover board.
+
+```text
+GET /operations/entries?view=all&q=pump&equipment=GT1&kind=TASK&status=open&from=2026-10-01&to=2026-10-31&page=1
+```
+
+Supported values: `equipment=GT1|GT2|ST|GENERAL`,
+`kind=EVENT|NOTE|VALVE|ATTENTION|TASK`, and `status=open|closed`.
+Filters are optional. Responses contain 20 records per page. Existing
+`view=open` and `view=history` behavior is preserved. Prisma parameterizes queries;
+`%` and `_` in search text are escaped and matched literally rather than as wildcards.
+
+The `20261019000300_handover_reads_and_entry_units` migration adds acknowledgment
+records, the shared revision, and a nullable equipment tag without deleting
+existing records. Back up the database before applying updates.
+
+## Contribution language
+
+Use English for branch descriptions, pull request titles and descriptions,
+commit subjects and bodies, README files, and other project documentation.
+Use the `AtaK/` prefix for new working branches. Application interface text
+continues to support both Turkish and English.
