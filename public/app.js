@@ -19,9 +19,9 @@ function showError(error) { if (error.name !== "AbortError") notify(error.messag
 async function failure(response) { try { return apiError((await response.json()).error) || t("failed"); } catch { return t("failed"); } }
 function releasePhoto() { if (photoUrl) URL.revokeObjectURL(photoUrl); photoUrl = null; $("entry-photo").removeAttribute("src"); }
 function logout({ preserveDraft = false } = {}) {
-  if (preserveDraft && user && draftDirty()) interruptedDraft = { ownerId: user.id,
+  if (preserveDraft && user && (draftDirty() || aiAssistant.dirty())) interruptedDraft = { ownerId: user.id,
     values: Object.fromEntries(["entry-kind", "entry-priority", "entry-unit", "entry-title", "entry-description"].map(id => [id, $(id).value])),
-    files: selectedPhotos.map(item => item.file) };
+    files: selectedPhotos.map(item => item.file), chat: aiAssistant.snapshot() };
   if (!preserveDraft) interruptedDraft = null;
   aiAssistant.reset();
   summary = null; operationFilters = new URLSearchParams();
@@ -40,7 +40,7 @@ async function api(path, options = {}) {
   try { response = await fetch(path, { ...options, signal: session.signal, headers: { "Accept-Language": lang(), ...options.headers, Authorization: `Bearer ${token}` } }); }
   catch (error) { if (error.name === "AbortError") throw error; throw new Error(t("connection")); }
   if (identity !== token) throw new DOMException("Session changed", "AbortError");
-  if (response.status === 401) { const unsaved = draftDirty(); logout({ preserveDraft: true }); const message = t(unsaved ? "expiredDraft" : "expired"); notify(message, true); throw new Error(message); }
+  if (response.status === 401) { const unsaved = draftDirty() || aiAssistant.dirty(); logout({ preserveDraft: true }); const message = t(unsaved ? "expiredDraft" : "expired"); notify(message, true); throw new Error(message); }
   if (!response.ok) throw new Error(await failure(response));
   return response;
 }
@@ -74,7 +74,7 @@ $("login-form").addEventListener("submit", async event => {
     if (interruptedDraft) {
       if (interruptedDraft.ownerId === user.id) {
         for (const [id, value] of Object.entries(interruptedDraft.values)) $(id).value = value;
-        addPhotos(interruptedDraft.files); notify(t("draftRestored"));
+        addPhotos(interruptedDraft.files); aiAssistant.restore(interruptedDraft.chat); notify(t("draftRestored"));
       }
       interruptedDraft = null;
     }
@@ -82,7 +82,7 @@ $("login-form").addEventListener("submit", async event => {
   } catch (error) { showError(error instanceof TypeError ? new Error(t("connection")) : error); }
   finally { $("login-button").disabled = false; $("switch-auth").disabled = false; }
 });
-$("logout").addEventListener("click", () => { if ((draftDirty() || interruptedDraft) && !confirm(t("discardDraft"))) return; logout(); notify(t("signedOut")); });
+$("logout").addEventListener("click", () => { if ((draftDirty() || aiAssistant.dirty() || interruptedDraft) && !confirm(t("discardDraft"))) return; logout(); notify(t("signedOut")); });
 function renderIdentity() {
   if (!user) return;
   $("greeting").textContent = t("greeting", { name: user.name.trim().split(/\s+/)[0] }); $("account-role").textContent = t(user.role);
@@ -215,7 +215,7 @@ $("entry-form").addEventListener("submit", async event => {
   const body = new FormData($("entry-form")); body.delete("photos");
   selectedPhotos.forEach(item => body.append("photos", item.file));
   const controls = [...$("entry-form").querySelectorAll("input,select,textarea,button"), ...document.querySelectorAll("[data-quick-kind]")].map(element => ({ element, disabled: element.disabled }));
-  entrySending = true; controls.forEach(({ element }) => { element.disabled = true; }); $("entry-save").textContent = t("saveProgress");
+  entrySending = true; aiAssistant.render(); controls.forEach(({ element }) => { element.disabled = true; }); $("entry-save").textContent = t("saveProgress");
   try { await api("/operations/entries", { method: "POST", body }); $("entry-form").reset(); board.page = 1; history.page = 1; notify(t("entrySaved")); await loadOperations(); }
   catch (error) { showError(error); }
   finally { entrySending = false; controls.forEach(({ element, disabled }) => { element.disabled = disabled; }); $("entry-save").textContent = t("save"); aiAssistant.render(); }
@@ -271,7 +271,7 @@ $("choose-photos").addEventListener("click", () => $("entry-photos").click());
 $("take-photo").addEventListener("click", () => $("camera-photo").click());
 $("entry-form").addEventListener("input", () => { $("draft-hint").hidden = !draftDirty(); });
 $("entry-form").addEventListener("reset", () => { selectedPhotos.forEach(item => URL.revokeObjectURL(item.url)); selectedPhotos = []; queueMicrotask(renderPhotos); });
-window.addEventListener("beforeunload", event => { if (draftDirty() || interruptedDraft) { event.preventDefault(); event.returnValue = ""; } });
+window.addEventListener("beforeunload", event => { if (draftDirty() || aiAssistant.dirty() || interruptedDraft) { event.preventDefault(); event.returnValue = ""; } });
 document.querySelectorAll("[data-quick-kind]").forEach(button => button.addEventListener("click", () => {
   if (entrySending) return;
   $("entry-kind").value = button.dataset.quickKind;

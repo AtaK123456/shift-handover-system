@@ -1,4 +1,6 @@
 import { test, expect, type Page } from "@playwright/test";
+// Multi-step chat flows also run on resource-constrained CI workers.
+test.setTimeout(60_000);
 const proposal = { equipment: "GT1", category: "VIBRATION", kind: "ATTENTION", priority: "HIGH",
   rationale: "Titreşim artışı ve bakım kontrolü isteği var.", uncertainty: "Ölçüm değeri ve tesis limiti belirtilmemiş.",
   evidence: ["GT1 ünitesinde titreşim artışı gözlendi."], questions: ["Ölçülen titreşim değeri nedir?"] };
@@ -20,6 +22,8 @@ async function signIn(page: Page, enabled = true) {
 async function fillEntry(page: Page) {
   await page.locator("#entry-title").fill("Titreşim gözlemi");
   await page.locator("#entry-description").fill("GT1 ünitesinde titreşim artışı gözlendi. Bakım ekibinin kontrol etmesi gerekiyor.");
+  if (await page.locator("#ai-chat").isHidden()) await page.locator("#ai-launcher").click();
+  await page.locator("#ai-import").click();
 }
 
 test("AI suggestions require explicit field selection and do not save or change source text", async ({ page }) => {
@@ -42,7 +46,12 @@ test("AI suggestions require explicit field selection and do not save or change 
   await expect(page.locator("#entry-priority")).toHaveValue("HIGH");
   await expect(page.locator("#entry-description")).toHaveValue(requests[0].description);
   expect(saves).toBe(0);
+  await page.locator("#ai-chat-input").fill("Kontrol sonucu bekleniyor.");
+  if (await page.locator("#ai-chat").isVisible()) await page.locator("#ai-chat-close").click();
   await page.locator("#entry-save").click(); await expect.poll(() => saves).toBe(1);
+  await page.locator("#ai-launcher").click();
+  await expect(page.locator("#ai-messages .ai-bubble-user")).toHaveCount(1);
+  await expect(page.locator("#ai-chat-input")).toHaveValue("Kontrol sonucu bekleniyor.");
 });
 
 test("edits invalidate pending analysis, discard late results, and permit manual saving", async ({ page }) => {
@@ -70,6 +79,7 @@ test("analysis failure preserves text and photos and manual save works when AI i
   await expect(page.locator("#photo-previews figure")).toHaveCount(1);
   await expect(page.locator("#entry-save")).toBeEnabled();
   page.on("dialog", dialog => dialog.accept());
+  await page.locator("#ai-chat-close").click();
   await page.locator("#logout").click();
   await page.route("**/ai/status", route => route.fulfill({ json: { enabled: false } }));
   await page.locator("#email").fill("test@example.com"); await page.locator("#password").fill("test-password-123"); await page.locator("#login-button").click();
@@ -77,6 +87,7 @@ test("analysis failure preserves text and photos and manual save works when AI i
   await fillEntry(page);
   let saved = false;
   await page.route("**/operations/entries", route => { saved = true; return route.fulfill({ status: 201, json: {} }); });
+  if (await page.locator("#ai-chat").isVisible()) await page.locator("#ai-chat-close").click();
   await page.locator("#entry-save").click();
   await expect(page.locator("#entry-title")).toHaveValue(""); expect(saved).toBe(true);
 });
@@ -101,13 +112,17 @@ test("bilingual AI controls fit mobile dark mode and language changes invalidate
   await expect(page.locator("#ai-result")).toBeVisible();
   await page.locator("#dashboard [data-language]").selectOption("en");
   await expect(page.locator("#ai-result")).toBeHidden();
-  await expect(page.locator("#ai-analyze")).toHaveText("Analyze with AI");
+  await expect(page.locator("#ai-analyze")).toHaveText("Send");
   await page.locator("#dashboard [data-theme-toggle]").click();
   await page.locator("#ai-analyze").click(); await expect(page.locator("#ai-result")).toBeVisible();
   for (const width of [320,390]) {
     await page.setViewportSize({ width, height: 844 });
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   }
+  const chatBounds = await page.locator("#ai-chat").boundingBox();
+  expect(chatBounds!.x).toBeGreaterThanOrEqual(0);
+  expect(chatBounds!.y).toBeGreaterThanOrEqual(0);
+  expect(chatBounds!.y + chatBounds!.height).toBeLessThanOrEqual(844);
   await page.locator(".ai-assistant").screenshot({ path: "../ai-assistant-mobile.png" });
 });
 
@@ -122,4 +137,47 @@ test("expired AI session clears proposals and restores the draft only after sign
   await expect(page.locator("#entry-title")).toHaveValue("Titreşim gözlemi");
   await expect(page.locator("#ai-result")).toBeHidden();
   await expect(page.locator("#entry-unit")).toHaveValue("");
+});
+
+test("floating chat accepts follow-up details, preserves them on close, and requires text approval", async ({ page }) => {
+  const inputs: any[] = [];
+  await page.route("**/ai/analyze", route => { inputs.push(route.request().postDataJSON()); return route.fulfill({ json: { analysis: proposal } }); });
+  await signIn(page);
+  await expect(page.locator("#ai-chat")).toBeHidden();
+  const launcher = page.locator("#ai-launcher");
+  await expect(launcher).toHaveCSS("position", "fixed");
+  await launcher.click(); await expect(launcher).toHaveAttribute("aria-expanded", "true");
+  await page.locator("#ai-chat-input").fill("GT1 ünitesinde titreşim artışı gözlendi.");
+  await page.locator("#ai-chat-input").press("Control+Enter");
+  await expect(page.locator("#ai-result")).toBeVisible();
+  await expect(page.locator("#entry-description")).toHaveValue("");
+  await page.locator("#ai-chat-input").fill("Ölçülen değer 6 mm/s, saat 08:15.");
+  await expect(page.locator("#ai-apply")).toBeDisabled();
+  await page.locator("#ai-analyze").click();
+  await expect(page.locator("#ai-chat-input")).toHaveValue("");
+  expect(inputs[1].description).toContain("GT1 ünitesinde"); expect(inputs[1].description).toContain("6 mm/s");
+  await page.locator("#ai-chat-close").click(); await launcher.click();
+  await expect(page.locator("#ai-messages .ai-bubble-user")).toHaveCount(2);
+  await page.locator("#ai-use-text").uncheck(); await expect(page.locator("#ai-apply")).toBeDisabled();
+  await page.locator("#ai-use-text").check(); await page.locator("#ai-apply").click();
+  await expect(page.locator("#entry-description")).toHaveValue(inputs[1].description);
+  await expect(page.locator("#entry-priority")).toHaveValue("HIGH");
+  await page.keyboard.press("Escape"); await expect(page.locator("#ai-chat")).toBeHidden(); await expect(launcher).toBeFocused();
+});
+
+test("floating launcher stays on screen and chat resets between accounts", async ({ page }) => {
+  await signIn(page);
+  await page.setViewportSize({ width: 320, height: 640 });
+  await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+  const bounds = await page.locator("#ai-launcher").boundingBox();
+  expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(320); expect(bounds!.y + bounds!.height).toBeLessThanOrEqual(640);
+  await page.locator("#ai-launcher").click();
+  await page.locator("#ai-chat-input").fill("Private draft for the first account.");
+  await page.locator("#ai-chat-close").click();
+  page.on("dialog", dialog => dialog.accept()); await page.locator("#logout").click();
+  await expect(page.locator("#ai-launcher")).toBeHidden();
+  await page.route("**/login", route => route.fulfill({ json: { token: "another-token", user: { id: 3, name: "Other", role: "WORKER" } } }));
+  await page.locator("#email").fill("other@example.com"); await page.locator("#password").fill("test-password-123"); await page.locator("#login-button").click();
+  await page.locator("#ai-launcher").click();
+  await expect(page.locator("#ai-chat-input")).toHaveValue(""); await expect(page.locator("#ai-messages")).toBeEmpty();
 });

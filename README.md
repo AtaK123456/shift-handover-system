@@ -328,19 +328,36 @@ continues to support both Turkish and English.
 
 ## Optional AI entry assistant
 
-The entry form includes **Analyze with AI**. An authenticated operator can request
+A fixed AI bubble in the bottom-right corner opens a floating conversation panel.
+An authenticated operator can request
 suggestions for GT1/GT2/ST equipment, event category, entry type, and human review
 priority. The result includes reasoning, literal quotes from the submitted text,
 uncertainties, and up to five missing-information questions. Unknown equipment or
 priority is explicitly shown as unclear and cannot overwrite those form fields.
 
+Write an event directly in the conversation or select **Import form draft**.
+Subsequent messages add missing details to the same analyzed record, up to 4,000
+characters total. The panel can be closed and reopened without losing the current
+conversation. Ctrl/Cmd+Enter sends a message; Enter inserts a new line.
+
 Suggestions are separate from the operator's choices. Select which equipment,
 entry-type, and priority suggestions to apply, then select **Apply selected
 suggestions**. Review or edit the fields and use **Save** to create the entry.
 Applying or dismissing AI suggestions does not save an entry or modify equipment
-status. Original title/description text is preserved. Editing the source text,
+status. For a conversation that differs from the form, a separate checked option
+explicitly approves transferring the analyzed text as well; unchecking it disables
+application to avoid attaching suggestions to a different record. Importing a draft
+retains its title; a new conversation uses the first sentence as an editable title.
+Editing the form source text,
 changing language, saving, resetting the form, or logging out invalidates the
 analysis and discards late results. Questions are optional and never block saving.
+Saving the form clears actionable proposals but retains conversation text and
+unsent messages. Use **Clear chat** when starting a different event.
+Escape closes the nonmodal panel and
+returns focus to its launcher. The panel supports mobile screens and both themes.
+Unsaved conversations trigger logout/navigation warnings. Expired-session drafts
+are restored only for the same account, with no restored AI proposals. Explicit
+logout clears the conversation; another account never sees it.
 
 This first release analyzes the current entry only. It does not rank the shared
 board or generate a whole-shift summary. Category, explanations, questions, and
@@ -364,8 +381,8 @@ OpenAI API access/billing is separate from a ChatGPT subscription. The server mu
 be able to reach `https://api.openai.com` over HTTPS. Without configuration or when
 AI is unavailable, normal entry creation and photo uploads continue to work.
 
-Only an explicit analysis request sends the current title, description, and UI
-language to OpenAI. Photos, credentials, user identities, and existing plant
+Only an explicit Send request sends the combined record text from the conversation,
+any imported title, and UI language to OpenAI. Photos, credentials, user identities, and existing plant
 history are not sent. The interface discloses this before the button. Consider
 what operators include in free text before enabling external processing.
 Responses are requested with `store: false`; this is not a guarantee of zero
