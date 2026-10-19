@@ -4,7 +4,9 @@ let token = null, user = null, current, signingUp = false, shiftBusy = false, lo
 let page = 1, total = 0, applied = new URLSearchParams(), listVersion = 0;
 let session = new AbortController(), equipment = [], selectedEquipment = null, closingEntry = null, photoUrl = null;
 let board = { items: [], page: 1, total: 0 }, history = { items: [], page: 1, total: 0 }, shiftRows = [];
-let operationsVersion = 0;
+let operationsVersion = 0, summary = null, summaryBusy = false;
+let selectedPhotos = [], interruptedDraft = null, entrySending = false;
+let operationFilters = new URLSearchParams();
 const df = () => new Intl.DateTimeFormat(locale(), { timeZone: "Europe/Istanbul", day: "2-digit", month: "short", year: "numeric" });
 const tf = () => new Intl.DateTimeFormat(locale(), { timeZone: "Europe/Istanbul", hour: "2-digit", minute: "2-digit" });
 const localDate = value => new Intl.DateTimeFormat("sv-SE", { timeZone: "Europe/Istanbul" }).format(new Date(value));
@@ -14,12 +16,17 @@ function notify(message, error = false) { const el = token ? $("dashboard-messag
 function showError(error) { if (error.name !== "AbortError") notify(error.message || t("failed"), true); }
 async function failure(response) { try { return apiError((await response.json()).error) || t("failed"); } catch { return t("failed"); } }
 function releasePhoto() { if (photoUrl) URL.revokeObjectURL(photoUrl); photoUrl = null; $("entry-photo").removeAttribute("src"); }
-function logout() {
+function logout({ preserveDraft = false } = {}) {
+  if (preserveDraft && user && draftDirty()) interruptedDraft = { ownerId: user.id,
+    values: Object.fromEntries(["entry-kind", "entry-priority", "entry-unit", "entry-title", "entry-description"].map(id => [id, $(id).value])),
+    files: selectedPhotos.map(item => item.file) };
+  if (!preserveDraft) interruptedDraft = null;
+  summary = null; operationFilters = new URLSearchParams();
   session.abort(); session = new AbortController(); token = null; user = null; current = undefined; listVersion++; operationsVersion++;
   document.querySelectorAll("dialog[open]").forEach(dialog => dialog.close()); releasePhoto();
   equipment = []; board = { items: [], page: 1, total: 0 }; history = { items: [], page: 1, total: 0 }; shiftRows = [];
   $("dashboard").hidden = true; $("auth-view").hidden = false;
-  ["login-form", "filter-form", "entry-form", "shift-schedule"].forEach(id => $(id).reset());
+  ["login-form", "filter-form", "entry-form", "shift-schedule", "operations-filter"].forEach(id => $(id).reset());
   ["shift-rows", "board-entries", "operation-entries", "equipment-grid"].forEach(id => $(id).replaceChildren());
   $("account-name").textContent = ""; $("greeting").textContent = ""; $("scope-field").hidden = true;
   $("auth-message").textContent = ""; $("dashboard-message").textContent = ""; $("email").focus();
@@ -30,7 +37,7 @@ async function api(path, options = {}) {
   try { response = await fetch(path, { ...options, signal: session.signal, headers: { "Accept-Language": lang(), ...options.headers, Authorization: `Bearer ${token}` } }); }
   catch (error) { if (error.name === "AbortError") throw error; throw new Error(t("connection")); }
   if (identity !== token) throw new DOMException("Session changed", "AbortError");
-  if (response.status === 401) { logout(); throw new Error(t("expired")); }
+  if (response.status === 401) { const unsaved = draftDirty(); logout({ preserveDraft: true }); const message = t(unsaved ? "expiredDraft" : "expired"); notify(message, true); throw new Error(message); }
   if (!response.ok) throw new Error(await failure(response));
   return response;
 }
@@ -61,11 +68,18 @@ $("login-form").addEventListener("submit", async event => {
     $("account-name").textContent = user.name; $("avatar").textContent = user.name.trim().split(/\s+/).slice(0, 2).map(n => n[0]).join("").toLocaleUpperCase(locale());
     $("scope-field").hidden = user.role !== "MANAGER"; $("auth-view").hidden = true; $("dashboard").hidden = false; $("dashboard-message").textContent = "";
     applied = new URLSearchParams(); page = 1; renderIdentity(); renderCurrent();
+    if (interruptedDraft) {
+      if (interruptedDraft.ownerId === user.id) {
+        for (const [id, value] of Object.entries(interruptedDraft.values)) $(id).value = value;
+        addPhotos(interruptedDraft.files); notify(t("draftRestored"));
+      }
+      interruptedDraft = null;
+    }
     await Promise.all([loadCurrent(), loadHistory(), loadOperations()]);
   } catch (error) { showError(error instanceof TypeError ? new Error(t("connection")) : error); }
   finally { $("login-button").disabled = false; $("switch-auth").disabled = false; }
 });
-$("logout").addEventListener("click", () => { logout(); notify(t("signedOut")); });
+$("logout").addEventListener("click", () => { if ((draftDirty() || interruptedDraft) && !confirm(t("discardDraft"))) return; logout(); notify(t("signedOut")); });
 function renderIdentity() {
   if (!user) return;
   $("greeting").textContent = t("greeting", { name: user.name.trim().split(/\s+/)[0] }); $("account-role").textContent = t(user.role);
@@ -147,7 +161,7 @@ async function viewPhoto(id) {
 }
 function entryCard(item) {
   const card = node("article", undefined, `entry-card${item.priority === "HIGH" ? " important" : ""}`);
-  const meta = node("div", undefined, "entry-meta"); meta.append(node("span", t(item.kind), "entry-kind")); if (item.priority === "HIGH") meta.append(node("span", t("HIGH"), "priority-high")); if (item.closedAt) meta.append(node("span", t("closed"), "status"));
+  const meta = node("div", undefined, "entry-meta"); meta.append(node("span", t(item.kind), "entry-kind"), node("span", item.equipmentCode || t("general"), "status")); if (item.priority === "HIGH") meta.append(node("span", t("HIGH"), "priority-high")); if (item.closedAt) meta.append(node("span", t("closed"), "status"));
   card.append(meta, node("h3", item.title), node("p", item.description, "entry-description"), node("p", `${item.author.name} · ${stamp(item.createdAt)}${item.shiftId ? ` · #${item.shiftId}` : ""}`, "hint"));
   const actions = node("div", undefined, "entry-actions");
   item.photos.forEach((photo, index) => { const button = node("button", t("viewPhoto", { number: index + 1 }), "button quiet small"); button.type = "button"; button.addEventListener("click", () => viewPhoto(photo.id)); actions.append(button); });
@@ -159,7 +173,7 @@ function entryCard(item) {
 }
 function renderEntries() {
   for (const [state, prefix] of [[board, "board"], [history, "operation"]]) {
-    $(prefix === "board" ? "board-entries" : "operation-entries").replaceChildren(...(state.items.length ? state.items.map(entryCard) : [node("p", t(prefix === "board" ? "noOpen" : "noEntries"), "empty-state")]));
+    $(prefix === "board" ? "board-entries" : "operation-entries").replaceChildren(...(state.items.length ? state.items.map(entryCard) : [node("p", t(prefix === "board" ? "noOpen" : operationFilters.size ? "noOperationResults" : "noEntries"), "empty-state")]));
     $(prefix === "board" ? "board-count" : "operation-count").textContent = state.total;
     $(`${prefix}-page`).textContent = state.total ? t("pageLabel", { from: (state.page - 1) * 20 + 1, to: Math.min(state.page * 20, state.total), total: state.total }) : t("zero");
     $(`${prefix}-previous`).disabled = state.page <= 1; $(`${prefix}-next`).disabled = state.page * 20 >= state.total;
@@ -170,11 +184,13 @@ async function loadOperations() {
   $("refresh-operations").disabled = true;
   for (const prefix of ["board", "operation"]) for (const direction of ["previous", "next"]) $(`${prefix}-${direction}`).disabled = true;
   try {
-    const [units, open, entries] = await Promise.all([api("/operations/equipment").then(r => r.json()), api(`/operations/entries?view=open&page=${board.page}`).then(r => r.json()), api(`/operations/entries?view=history&page=${history.page}`).then(r => r.json())]);
+    const query = new URLSearchParams(operationFilters);
+    query.set("view", operationFilters.size ? "all" : "history"); query.set("page", history.page);
+    const [overview, open, entries] = await Promise.all([api("/operations/summary").then(r => r.json()), api(`/operations/entries?view=open&page=${board.page}`).then(r => r.json()), api(`/operations/entries?${query}`).then(r => r.json())]);
     if (!token || version !== operationsVersion) return;
-    equipment = units.items; board = open; history = entries;
+    summary = overview; equipment = overview.equipment; board = open; history = entries;
     if (board.page > 1 && !board.items.length) { board.page--; return loadOperations(); }
-    renderEquipment(); renderEntries();
+    renderSummary(); renderEquipment(); renderEntries();
   } catch (error) { if (version === operationsVersion) { showError(error); renderEntries(); } }
   finally { if (version === operationsVersion) $("refresh-operations").disabled = false; }
 }
@@ -189,12 +205,16 @@ $("equipment-form").addEventListener("submit", async event => {
   finally { $("equipment-save").disabled = false; if (token) await loadOperations(); }
 });
 $("entry-form").addEventListener("submit", async event => {
-  event.preventDefault(); const files = [...$("entry-photos").files];
-  if (files.length > 3 || files.some(file => file.size > 5 * 1024 * 1024)) return notify(t("photoLimit"), true);
-  $("entry-save").disabled = true; $("entry-save").textContent = t("saveProgress");
-  try { await api("/operations/entries", { method: "POST", body: new FormData($("entry-form")) }); $("entry-form").reset(); board.page = 1; history.page = 1; notify(t("entrySaved")); await loadOperations(); }
+  event.preventDefault();
+  if (entrySending) return;
+  if (selectedPhotos.length > 3 || selectedPhotos.some(item => item.file.size > 5 * 1024 * 1024)) return notify(t("photoLimit"), true);
+  const body = new FormData($("entry-form")); body.delete("photos");
+  selectedPhotos.forEach(item => body.append("photos", item.file));
+  const controls = [...$("entry-form").querySelectorAll("input,select,textarea,button"), ...document.querySelectorAll("[data-quick-kind]")].map(element => ({ element, disabled: element.disabled }));
+  entrySending = true; controls.forEach(({ element }) => { element.disabled = true; }); $("entry-save").textContent = t("saveProgress");
+  try { await api("/operations/entries", { method: "POST", body }); $("entry-form").reset(); board.page = 1; history.page = 1; notify(t("entrySaved")); await loadOperations(); }
   catch (error) { showError(error); }
-  finally { $("entry-save").disabled = false; $("entry-save").textContent = t("save"); }
+  finally { entrySending = false; controls.forEach(({ element, disabled }) => { element.disabled = disabled; }); $("entry-save").textContent = t("save"); }
 });
 $("close-form").addEventListener("submit", async event => {
   event.preventDefault(); $("close-save").disabled = true;
@@ -205,5 +225,61 @@ $("close-form").addEventListener("submit", async event => {
 document.querySelectorAll("[data-close]").forEach(button => button.addEventListener("click", () => $(button.dataset.close).close()));
 $("photo-dialog").addEventListener("close", releasePhoto);
 setInterval(() => { if (token && document.visibilityState === "visible") Promise.all([loadOperations(), loadCurrent()]); }, 30000);
-window.addEventListener("languagechange", () => { renderAuth(); notify(""); if (token) { renderIdentity(); renderCurrent(); renderRows(); renderEquipment(); renderEntries(); } });
-initializeLanguage(); renderAuth();
+window.addEventListener("languagechange", () => { renderAuth(); notify(""); if (token) { renderIdentity(); renderCurrent(); renderRows(); renderSummary(); renderEquipment(); renderEntries(); renderPhotos(); } });
+function renderSummary() {
+  if (!summary) { $("summary-read-status").textContent = t("summaryLoading"); $("summary-read").disabled = true; return; }
+  $("summary-units").replaceChildren(...summary.equipment.map(item => node("span", `${item.code} · ${t(item.status)}`, `unit-status unit-${item.status.toLowerCase()}`)));
+  $("summary-counts").replaceChildren(...[["summaryOpen", summary.counts.total], ["summaryImportant", summary.counts.important], ["summaryValves", summary.counts.VALVE], ["summaryTasks", summary.counts.TASK]].map(([key, value]) => {
+    const card = node("div", undefined, "summary-stat"); card.append(node("strong", value), node("span", t(key))); return card;
+  }));
+  $("summary-important").replaceChildren(...(summary.important.length ? summary.important.map(item => node("li", `${item.equipmentCode || t("general")} · ${item.title}`)) : [node("li", t("noImportant"))]));
+  $("summary-recent").replaceChildren(...(summary.recent.length ? summary.recent.map(item => node("li", `${t(item.kind)} · ${item.title}`)) : [node("li", t("noEntries"))]));
+  const read = summary.receipt?.revision === summary.revision;
+  $("summary-read").disabled = summaryBusy || !summary.activeShiftId || read;
+  $("summary-read").textContent = t(summaryBusy ? "processing" : "summaryRead");
+  $("summary-read-status").textContent = !summary.activeShiftId ? t("summaryStart") : read ? t("summaryReadDone", { date: stamp(summary.receipt.readAt) }) : summary.receipt ? t("summaryChanged") : "";
+}
+$("summary-read").addEventListener("click", async () => {
+  if (!summary || summaryBusy) return; summaryBusy = true; renderSummary();
+  try { await json("/operations/summary/read", "POST", { revision: summary.revision }); notify(t("summarySaved")); }
+  catch (error) { showError(error); }
+  finally { summaryBusy = false; if (token) await loadOperations(); }
+});
+function draftDirty() { return Boolean($("entry-title").value.trim() || $("entry-description").value.trim() || selectedPhotos.length); }
+function renderPhotos() {
+  $("photo-count").textContent = t("selectedPhotos", { count: selectedPhotos.length });
+  $("draft-hint").hidden = !draftDirty();
+  $("photo-previews").replaceChildren(...selectedPhotos.map(item => {
+    const figure = node("figure", undefined, "photo-preview"); const image = node("img"); image.src = item.url; image.alt = item.file.name;
+    const remove = node("button", t("removePhoto"), "text-button"); remove.type = "button";
+    remove.addEventListener("click", () => { if (entrySending) return; URL.revokeObjectURL(item.url); selectedPhotos = selectedPhotos.filter(photo => photo !== item); renderPhotos(); });
+    figure.append(image, node("figcaption", item.file.name), remove); return figure;
+  }));
+}
+function addPhotos(files) {
+  if (entrySending) return;
+  if (selectedPhotos.length + files.length > 3 || files.some(file => file.size > 5 * 1024 * 1024)) { notify(t("photoLimit"), true); return; }
+  for (const file of files) selectedPhotos.push({ file, url: URL.createObjectURL(file) });
+  renderPhotos();
+}
+for (const id of ["entry-photos", "camera-photo"]) $(id).addEventListener("change", event => { addPhotos([...event.target.files]); event.target.value = ""; });
+$("choose-photos").addEventListener("click", () => $("entry-photos").click());
+$("take-photo").addEventListener("click", () => $("camera-photo").click());
+$("entry-form").addEventListener("input", () => { $("draft-hint").hidden = !draftDirty(); });
+$("entry-form").addEventListener("reset", () => { selectedPhotos.forEach(item => URL.revokeObjectURL(item.url)); selectedPhotos = []; queueMicrotask(renderPhotos); });
+window.addEventListener("beforeunload", event => { if (draftDirty() || interruptedDraft) { event.preventDefault(); event.returnValue = ""; } });
+document.querySelectorAll("[data-quick-kind]").forEach(button => button.addEventListener("click", () => {
+  if (entrySending) return;
+  $("entry-kind").value = button.dataset.quickKind;
+  if (button.dataset.quickKind === "ATTENTION") $("entry-priority").value = "HIGH";
+  $("entry-form").scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth", block: "center" });
+  $("entry-title").focus({ preventScroll: true });
+}));
+$("operations-filter").addEventListener("submit", async event => {
+  event.preventDefault(); if ($("operations-from").value && $("operations-to").value && $("operations-from").value > $("operations-to").value) return notify(t("invalidRange"), true);
+  operationFilters = new URLSearchParams();
+  for (const [key, value] of new FormData($("operations-filter"))) if (String(value).trim()) operationFilters.set(key, String(value).trim());
+  history.page = 1; await loadOperations();
+});
+$("operations-clear").addEventListener("click", async () => { $("operations-filter").reset(); operationFilters = new URLSearchParams(); history.page = 1; await loadOperations(); });
+initializeLanguage(); renderAuth(); renderPhotos();

@@ -37,7 +37,9 @@ test("storage restrictions do not break theme selection or authentication form",
 });
 
 test("theme is shared by login/dashboard/logout, and mobile controls fit", async ({ page }) => {
-  await page.route("**/operations/**", route => route.fulfill({ json: { items: [], total: 0, page: 1, pageSize: 20 } }));
+  await page.route("**/operations/**", route => route.fulfill({ json: route.request().url().endsWith("/summary") ? {
+    revision: 0, equipment: [], counts: { total: 0, important: 0, VALVE: 0, ATTENTION: 0, TASK: 0 }, important: [], recent: [], activeShiftId: null, receipt: null
+  } : { items: [], total: 0, page: 1, pageSize: 20 } }));
   await page.route("**/login", route => route.fulfill({ json: { token: "ui-test-token", user: { id: 1, name: "Deniz Yılmaz", email: "test@example.com", role: "MANAGER" } } }));
   await page.route("**/shifts/current", route => route.fulfill({ json: { currentShift: null } }));
   await page.route(/\/shifts\?/, route => route.fulfill({ json: { items: [{ id: 1, user: { id: 1, name: "Deniz Yılmaz" }, startTime: "2026-10-19T05:00:00Z", endTime: "2026-10-19T13:00:00Z", status: "COMPLETED" }], total: 1, page: 1, pageSize: 20 } }));

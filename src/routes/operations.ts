@@ -1,3 +1,6 @@
+import { handoverSummary } from "../services/handover-summary.js";
+import { operationQuery } from "../services/operation-query.js";
+import { Prisma } from "../generated/prisma/client.js";
 import { Router } from "express";
 import multer from "multer";
 import sharp from "sharp";
@@ -6,7 +9,7 @@ import { EntryKind, EntryPriority, EquipmentStatus, type PrismaClient } from "..
 import { RequestError } from "../services/shift-query.js";
 const user = { select: { id: true, name: true } } as const;
 const entrySelect = { id: true, kind: true, priority: true, title: true, description: true, createdAt: true,
-  shiftId: true, author: user, closedAt: true, closedBy: user, closeNote: true,
+  shiftId: true, equipmentCode: true, author: user, closedAt: true, closedBy: user, closeNote: true,
   photos: { select: { id: true } } } as const;
 const boardKinds: EntryKind[] = [EntryKind.VALVE, EntryKind.ATTENTION, EntryKind.TASK];
 function text(value: unknown, min: number, max: number) {
@@ -19,7 +22,7 @@ function id(value: unknown) {
 }
 export function createOperationsRouter(prisma: PrismaClient) {
   const router = Router();
-  const uploads = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024, files: 3, fields: 4, fieldSize: 16000 },
+  const uploads = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024, files: 3, fields: 5, fieldSize: 16000 },
     fileFilter: (_req, file, done) => {
       if (!["image/jpeg", "image/png", "image/webp"].includes(file.mimetype)) return done(new RequestError("Yalnızca JPEG, PNG veya WebP fotoğraf yükleyin.", 400));
       done(null, true);
@@ -38,6 +41,7 @@ export function createOperationsRouter(prisma: PrismaClient) {
     }
     const note = text(req.body.note ?? "", 0, 1000);
     const result = await prisma.$transaction(async tx => {
+      await tx.operationRevision.update({ where: { id: 1 }, data: { version: { increment: 1 } } });
       const existing = await tx.equipment.findUniqueOrThrow({ where: { code } });
       const update = await tx.equipment.updateMany({ where: { code, version }, data: { status, note, version: { increment: 1 }, updatedById: req.user!.id, updatedAt: new Date() } });
       if (!update.count) throw new RequestError("Kayıt başka bir kullanıcı tarafından güncellendi. Yenileyip tekrar deneyin.", 409);
@@ -47,9 +51,7 @@ export function createOperationsRouter(prisma: PrismaClient) {
     res.json(result);
   });
   router.get("/entries", async (req, res) => {
-    const { view = "open", page = "1" } = req.query;
-    if (!["open", "history"].includes(String(view)) || typeof view !== "string" || typeof page !== "string" || !/^[1-9]\d{0,3}$/.test(page)) throw new RequestError("Geçersiz filtre parametresi.", 400);
-    const where = view === "open" ? { closedAt: null, kind: { in: boardKinds } } : { OR: [{ kind: { in: [EntryKind.EVENT, EntryKind.NOTE] } }, { closedAt: { not: null } }] };
+    const { where, page, view } = operationQuery(req.query);
     const [items, total] = await Promise.all([
       prisma.operationEntry.findMany({ where, select: entrySelect, take: 20, skip: (Number(page) - 1) * 20, orderBy: view === "open" ? [{ priority: "desc" }, { createdAt: "desc" }, { id: "desc" }] : [{ createdAt: "desc" }, { id: "desc" }] }),
       prisma.operationEntry.count({ where })
@@ -59,6 +61,8 @@ export function createOperationsRouter(prisma: PrismaClient) {
   router.post("/entries", writeLimit, uploads.array("photos", 3), async (req, res) => {
     const { kind, priority = "NORMAL" } = req.body ?? {};
     if (!Object.values(EntryKind).includes(kind) || !Object.values(EntryPriority).includes(priority)) throw new RequestError("Geçerli bir kayıt türü seçin.", 400);
+    const equipmentCode = [undefined, null, ""].includes(req.body.equipmentCode) ? null : req.body.equipmentCode;
+    if (equipmentCode !== null && !["GT1", "GT2", "ST"].includes(equipmentCode)) throw new RequestError("Ekipman durumunu kontrol edin.", 400);
     const title = text(req.body.title, 1, 160);
     const description = text(req.body.description, 1, 4000);
     const photos: { data: Uint8Array<ArrayBuffer> }[] = [];
@@ -71,19 +75,48 @@ export function createOperationsRouter(prisma: PrismaClient) {
         photos.push({ data: new Uint8Array(data) });
       } catch { throw new RequestError("Fotoğraf okunamadı. Geçerli JPEG, PNG veya WebP seçin.", 400); }
     }
-    const shift = await prisma.shift.findFirst({ where: { userId: req.user!.id, status: "ACTIVE" }, select: { id: true } });
-    const entry = await prisma.operationEntry.create({ data: { kind, priority, title, description, authorId: req.user!.id,
-      ...(shift ? { shiftId: shift.id } : {}), photos: { create: photos } }, select: entrySelect });
+    const entry = await prisma.$transaction(async tx => {
+      await tx.operationRevision.update({ where: { id: 1 }, data: { version: { increment: 1 } } });
+      const shift = await tx.shift.findFirst({ where: { userId: req.user!.id, status: "ACTIVE" }, select: { id: true } });
+      return tx.operationEntry.create({ data: { kind, priority, title, description, equipmentCode, authorId: req.user!.id,
+        ...(shift ? { shiftId: shift.id } : {}), photos: { create: photos } }, select: entrySelect });
+    });
     res.status(201).json(entry);
   });
   router.post("/entries/:id/close", writeLimit, async (req, res) => {
     const entryId = id(req.params.id);
     const closeNote = text(req.body?.closeNote ?? "", 0, 1000);
-    const updated = await prisma.operationEntry.updateMany({ where: { id: entryId, closedAt: null, kind: { in: boardKinds } },
-      data: { closedAt: new Date(), closedById: req.user!.id, closeNote } });
-    if (!updated.count) throw new RequestError("Kayıt bulunamadı veya zaten kapatıldı.", 409);
-    res.json(await prisma.operationEntry.findUniqueOrThrow({ where: { id: entryId }, select: entrySelect }));
+    const entry = await prisma.$transaction(async tx => {
+      await tx.operationRevision.update({ where: { id: 1 }, data: { version: { increment: 1 } } });
+      const updated = await tx.operationEntry.updateMany({ where: { id: entryId, closedAt: null, kind: { in: boardKinds } },
+        data: { closedAt: new Date(), closedById: req.user!.id, closeNote } });
+      if (!updated.count) throw new RequestError("Kayıt bulunamadı veya zaten kapatıldı.", 409);
+      return tx.operationEntry.findUniqueOrThrow({ where: { id: entryId }, select: entrySelect });
+    });
+    res.json(entry);
   });
+  router.get("/summary", async (req, res) => {
+    res.json(await prisma.$transaction(tx => handoverSummary(tx, req.user!.id), { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead }));
+  });
+  router.post("/summary/read", writeLimit, async (req, res) => {
+    const revision = req.body?.revision;
+    if (!Number.isInteger(revision) || revision < 0 || revision > 2147483647) throw new RequestError("Geçersiz özet sürümü.", 400);
+    const receipt = await prisma.$transaction(async tx => {
+      // Lock the same row as every operations write, so an unseen update cannot be acknowledged.
+      const locked = await tx.operationRevision.updateMany({ where: { id: 1, version: revision }, data: { version: revision } });
+      if (!locked.count) throw new RequestError("Devir özeti değişti. Güncel özeti inceleyip tekrar onaylayın.", 409);
+      const summary = await handoverSummary(tx, req.user!.id);
+      if (!summary.activeShiftId) throw new RequestError("Devri onaylamadan önce vardiyanızı başlatın.", 409);
+      const active = await tx.shift.updateMany({ where: { id: summary.activeShiftId, userId: req.user!.id, status: "ACTIVE" }, data: { status: "ACTIVE" } });
+      if (!active.count) throw new RequestError("Devri onaylamadan önce vardiyanızı başlatın.", 409);
+      const { receipt: _previous, ...snapshot } = summary;
+      return tx.handoverRead.upsert({ where: { userId_shiftId_revision: { userId: req.user!.id, shiftId: summary.activeShiftId, revision } },
+        create: { userId: req.user!.id, shiftId: summary.activeShiftId, revision, snapshot: JSON.parse(JSON.stringify(snapshot)) }, update: {},
+        select: { id: true, revision: true, readAt: true } });
+    });
+    res.json(receipt);
+  });
+
   router.get("/photos/:id", async (req, res) => {
     if (typeof req.params.id !== "string" || !/^[a-f0-9-]{36}$/i.test(req.params.id)) throw new RequestError("Fotoğraf bulunamadı.", 404);
     const photo = await prisma.operationPhoto.findUnique({ where: { id: req.params.id }, select: { data: true } });
