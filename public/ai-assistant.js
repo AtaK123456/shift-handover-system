@@ -99,7 +99,11 @@ export function createAiAssistant({ api, isSaving }) {
       message = "aiReview"; bubble("assistant", result.rationale); showResult();
     } catch (error) {
       if (requestVersion !== version || error.name === "AbortError") return;
-      message = "aiFailed"; failed = true;
+      const errors = { AI_KEY_INVALID: "aiKeyInvalid", AI_ACCESS_DENIED: "aiAccessDenied", AI_QUOTA: "aiQuota",
+        AI_PROVIDER_RATE_LIMIT: "aiProviderRateLimit", AI_MODEL_UNAVAILABLE: "aiModelUnavailable", AI_CONFIGURATION: "aiConfiguration",
+        AI_TIMEOUT: "aiTimeout", AI_CONNECTION: "aiConnection", AI_INVALID_RESPONSE: "aiInvalidResponse",
+        AI_INCOMPLETE: "aiIncomplete", AI_REFUSED: "aiRefused", AI_RATE_LIMIT: "aiRateLimit", AI_BUSY: "aiBusy", AI_DISABLED: "aiDisabled" };
+      message = Object.hasOwn(errors, error.code) ? errors[error.code] : "aiFailed"; failed = true;
     } finally { if (requestVersion === version) {
       busy = false; render();
       const reply = $("ai-messages").lastElementChild;

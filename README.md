@@ -391,6 +391,22 @@ Responses are requested with `store: false`; this is not a guarantee of zero
 provider retention, which depends on the provider's policies and account settings.
 The application does not add AI request/response logs or persist the analysis.
 
+### Troubleshooting AI errors
+
+A failed `/ai/analyze` request previously returned a generic HTTP 502. The chat
+now shows a specific, translated error without exposing provider response bodies
+or signing the operator out. `AI_QUOTA` means the provider reported insufficient
+API credit or a spending limit: check billing for the API project that owns the
+key. A ChatGPT subscription does not supply API credit. After changing `.env`,
+restart the server.
+
+Other codes distinguish invalid keys (`AI_KEY_INVALID`), denied access
+(`AI_ACCESS_DENIED`), an unavailable model (`AI_MODEL_UNAVAILABLE`), rejected
+request settings (`AI_CONFIGURATION`), provider throttling
+(`AI_PROVIDER_RATE_LIMIT`), connection failures (`AI_CONNECTION`), and timeouts
+(`AI_TIMEOUT`). Incomplete, refused, and invalid model output are not shown as
+usable proposals. HTTP 502 alone cannot identify which upstream failure occurred.
+
 ### Boundaries and API
 
 AI is decision support, not a diagnosis or a calibrated safety/risk score. It has

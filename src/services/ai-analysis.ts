@@ -11,7 +11,8 @@ export type Analysis = {
 };
 export type Analyzer = (input: AnalysisInput, signal?: AbortSignal) => Promise<Analysis>;
 const keys = ["equipment", "category", "kind", "priority", "rationale", "uncertainty", "evidence", "questions"];
-const string = (maxLength: number) => ({ type: "string", minLength: 1, maxLength });
+// Keep provider schema portable; enforce text bounds again on the server.
+const string = (maxLength: number) => ({ type: "string", description: `Non-empty text, at most ${maxLength} characters.` });
 const enumeration = (values: readonly string[]) => ({ type: "string", enum: values });
 export const analysisSchema = { type: "object", additionalProperties: false, required: keys, properties: {
   equipment: enumeration(equipmentCodes), category: enumeration(categories), kind: enumeration(entryKinds),
@@ -57,7 +58,29 @@ export function createOpenAiAnalyzer(env: NodeJS.ProcessEnv = process.env, trans
       input: [{ role: "system", content: instructions }, { role: "user", content: JSON.stringify(input) }],
       text: { format: { type: "json_schema", name: "handover_analysis", strict: true, schema: analysisSchema } }
     }, { signal });
-    if (response.status !== "completed" || !response.output_text) throw new Error("Incomplete analysis");
-    return validateAnalysis(JSON.parse(response.output_text), input);
+    if (response.output.some(item => item.type === "message" && item.content.some(part => part.type === "refusal"))) {
+      throw new AiError("AI_REFUSED", 422);
+    }
+    if (response.status !== "completed" || !response.output_text) throw new AiError("AI_INCOMPLETE", 502);
+    try { return validateAnalysis(JSON.parse(response.output_text), input); }
+    catch { throw new AiError("AI_INVALID_RESPONSE", 502); }
   };
+}
+
+// Never expose SDK messages/bodies: they can contain submitted text or credentials.
+export class AiError extends Error {
+  constructor(public readonly code: string, public readonly status: number) { super(code); }
+}
+export function aiFailure(error: unknown): { error: string; status: number } {
+  if (error instanceof AiError) return { error: error.code, status: error.status };
+  if (error instanceof OpenAI.APIConnectionTimeoutError || error instanceof OpenAI.APIUserAbortError) return { error: "AI_TIMEOUT", status: 504 };
+  if (error instanceof OpenAI.APIConnectionError) return { error: "AI_CONNECTION", status: 503 };
+  if (error instanceof OpenAI.APIError) {
+    if (error.status === 401) return { error: "AI_KEY_INVALID", status: 503 };
+    if (error.status === 403) return { error: "AI_ACCESS_DENIED", status: 503 };
+    if (error.status === 429) return { error: error.code === "insufficient_quota" ? "AI_QUOTA" : "AI_PROVIDER_RATE_LIMIT", status: 503 };
+    if (error.status === 404) return { error: "AI_MODEL_UNAVAILABLE", status: 503 };
+    if (error.status === 400 || error.status === 422) return { error: "AI_CONFIGURATION", status: 503 };
+  }
+  return { error: "AI_UNAVAILABLE", status: 502 };
 }

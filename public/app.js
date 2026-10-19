@@ -41,7 +41,12 @@ async function api(path, options = {}) {
   catch (error) { if (error.name === "AbortError") throw error; throw new Error(t("connection")); }
   if (identity !== token) throw new DOMException("Session changed", "AbortError");
   if (response.status === 401) { const unsaved = draftDirty() || aiAssistant.dirty(); logout({ preserveDraft: true }); const message = t(unsaved ? "expiredDraft" : "expired"); notify(message, true); throw new Error(message); }
-  if (!response.ok) throw new Error(await failure(response));
+  if (!response.ok) {
+    let code; try { code = (await response.clone().json()).error; } catch { /* Non-JSON gateway response. */ }
+    const error = new Error(await failure(response));
+    if (typeof code === "string") error.code = code;
+    throw error;
+  }
   return response;
 }
 const json = (path, method, body) => api(path, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });

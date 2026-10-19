@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { rateLimit } from "express-rate-limit";
-import { createOpenAiAnalyzer, validateAnalysis, type AnalysisInput, type Analyzer } from "../services/ai-analysis.js";
+import { aiFailure, createOpenAiAnalyzer, validateAnalysis, type AnalysisInput, type Analyzer } from "../services/ai-analysis.js";
 
 export function createAiRouter(analyzer: Analyzer | null = createOpenAiAnalyzer()) {
   const router = Router();
@@ -30,9 +30,9 @@ export function createAiRouter(analyzer: Analyzer | null = createOpenAiAnalyzer(
     try {
       const analysis = await analyzer(input, controller.signal);
       res.json({ analysis: validateAnalysis(analysis, input) });
-    } catch {
-      // Never return provider messages, credentials, or submitted plant text in errors.
-      if (!res.destroyed) res.status(502).json({ error: "AI_UNAVAILABLE" });
+    } catch (error) {
+      const failure = controller.signal.aborted ? { error: "AI_TIMEOUT", status: 504 } : aiFailure(error);
+      if (!res.destroyed) res.status(failure.status).json({ error: failure.error });
     } finally {
       clearTimeout(timer); res.off("close", cancel); inFlight--;
     }

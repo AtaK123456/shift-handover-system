@@ -181,3 +181,18 @@ test("floating launcher stays on screen and chat resets between accounts", async
   await page.locator("#ai-launcher").click();
   await expect(page.locator("#ai-chat-input")).toHaveValue(""); await expect(page.locator("#ai-messages")).toBeEmpty();
 });
+
+
+test("API quota failures explain billing in both languages and preserve login and typed text", async ({ page }) => {
+  await page.route("**/ai/analyze", route => route.fulfill({ status: 503, json: { error: "AI_QUOTA" } }));
+  await signIn(page);
+  await page.locator("#ai-launcher").click();
+  await page.locator("#ai-chat-input").fill("GT1 titreşimi arttı.");
+  await page.locator("#ai-analyze").click();
+  await expect(page.locator("#ai-status")).toContainText("API bakiyesi");
+  await expect(page.locator("#ai-chat-input")).toHaveValue("GT1 titreşimi arttı.");
+  await expect(page.locator("#dashboard")).toBeVisible();
+  await page.locator("#dashboard [data-language]").selectOption("en");
+  await expect(page.locator("#ai-status")).toContainText("API credit");
+  await expect(page.locator("#ai-analyze")).toBeEnabled();
+});

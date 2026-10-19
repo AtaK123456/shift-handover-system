@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
+import OpenAI from "openai";
 import { test } from "node:test";
 import request from "supertest";
 import jwt from "jsonwebtoken";
 import { createApp } from "../src/app.js";
-import { createOpenAiAnalyzer, validateAnalysis, type Analyzer, type AnalysisInput } from "../src/services/ai-analysis.js";
+import { aiFailure, createOpenAiAnalyzer, validateAnalysis, type Analyzer, type AnalysisInput } from "../src/services/ai-analysis.js";
 import type { PrismaClient } from "../src/generated/prisma/client.js";
 const secret = "ai-test-secret-".repeat(4);
 const input: AnalysisInput = { title: "GT1 vibration", description: "GT1 vibration increased. Maintenance review requested.", language: "en" };
@@ -90,6 +91,8 @@ test("OpenAI adapter uses strict output, no storage, and only submitted text", a
   assert.equal(sent.model, "configured-model");
   assert.equal(sent.store, false);
   assert.equal(sent.text.format.strict, true);
+  assert.equal(sent.text.format.schema.properties.rationale.minLength, undefined);
+  assert.equal(sent.text.format.schema.properties.rationale.maxLength, undefined);
   assert.equal(sent.max_output_tokens, 1800);
   assert.deepEqual(JSON.parse(sent.input[1].content), input);
   assert.match(sent.input[0].content, /untrusted JSON record/);
@@ -104,4 +107,37 @@ test("OpenAI adapter rejects incomplete output and does not retry provider error
     calls++; return new Response(JSON.stringify({ error: { message: "Provider unavailable" } }), { status: 429, headers: { "Content-Type": "application/json" } });
   });
   await assert.rejects(unavailable!(input)); assert.equal(calls, 1);
+});
+
+test("provider failures have safe actionable codes without expiring the operator session", async () => {
+  for (const [status, code, expected] of [
+    [401, "invalid_api_key", "AI_KEY_INVALID"], [403, "permission_denied", "AI_ACCESS_DENIED"],
+    [429, "insufficient_quota", "AI_QUOTA"], [429, "rate_limit_exceeded", "AI_PROVIDER_RATE_LIMIT"],
+    [404, "model_not_found", "AI_MODEL_UNAVAILABLE"], [400, "invalid_json_schema", "AI_CONFIGURATION"]
+  ] as const) {
+    const adapter = createOpenAiAnalyzer({ AI_ENABLED: "true", OPENAI_API_KEY: "private-key" }, async () =>
+      new Response(JSON.stringify({ error: { code, message: "private-key private-plant-text" } }), { status, headers: { "Content-Type": "application/json" } }));
+    const app = setup(adapter);
+    await send(app).expect(503, { error: expected });
+    await request(app).get("/ai/status").set("Authorization", bearer()).expect(200, { enabled: true });
+  }
+});
+
+test("incomplete, refused, and invalid provider responses remain distinct and never become suggestions", async () => {
+  for (const [status, content, expected, http] of [
+    ["incomplete", [], "AI_INCOMPLETE", 502],
+    ["completed", [{ type: "refusal", refusal: "private refusal text" }], "AI_REFUSED", 422],
+    ["completed", [{ type: "output_text", text: "not json", annotations: [] }], "AI_INVALID_RESPONSE", 502],
+    ["completed", [{ type: "output_text", text: JSON.stringify({ ...proposal, evidence: ["invented"] }), annotations: [] }], "AI_INVALID_RESPONSE", 502]
+  ] as const) {
+    const adapter = createOpenAiAnalyzer({ AI_ENABLED: "true", OPENAI_API_KEY: "private-key" }, async () =>
+      new Response(JSON.stringify({ id: "resp_test", object: "response", status, output: [{ type: "message", role: "assistant", content }] }), { headers: { "Content-Type": "application/json" } }));
+    await send(setup(adapter)).expect(http, { error: expected });
+  }
+});
+
+
+test("connection and timeout errors use safe codes", () => {
+  assert.deepEqual(aiFailure(new OpenAI.APIConnectionTimeoutError()), { error: "AI_TIMEOUT", status: 504 });
+  assert.deepEqual(aiFailure(new OpenAI.APIConnectionError({ message: "private connection detail" })), { error: "AI_CONNECTION", status: 503 });
 });
