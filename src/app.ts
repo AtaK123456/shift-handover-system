@@ -31,7 +31,11 @@ export function createApp(prisma: PrismaClient, secret: string, options: { analy
   const authenticate = authenticateToken(prisma, secret);
   const shifts = createShiftService(prisma);
   app.disable("x-powered-by");
-  app.use(helmet({ contentSecurityPolicy: { directives: { imgSrc: ["'self'", "data:", "blob:"] } } }));
+  app.use(helmet({ contentSecurityPolicy: { directives: {
+    imgSrc: ["'self'", "data:", "blob:"],
+    // LAN HTTP development must not upgrade assets to an unavailable HTTPS server.
+    upgradeInsecureRequests: process.env.NODE_ENV === "production" ? [] : null
+  } } }));
   app.use(express.json({ limit: "16kb" }));
   app.use((_req, res, next) => { res.setHeader("Cache-Control", "no-store"); next(); });
   const limiter = (limit: number) => rateLimit({ windowMs: 15 * 60 * 1000, limit,

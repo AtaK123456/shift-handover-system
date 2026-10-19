@@ -3,7 +3,7 @@ const $ = id => document.getElementById(id);
 const element = (tag, text, className) => { const item = document.createElement(tag); if (text !== undefined) item.textContent = text; if (className) item.className = className; return item; };
 
 export function createAiAssistant({ api, isSaving }) {
-  let enabled = false, available = false, busy = false, version = 0, connectionVersion = 0;
+  let enabled = false, available = false, busy = false, version = 0, connectionVersion = 0, composerVersion = 0;
   let result = null, source = null, record = "", recordTitle = "", message = "", failed = false;
   const draft = () => ({ title: $("entry-title").value, description: $("entry-description").value, language: lang() });
   const sameSource = () => source && JSON.stringify(source.draft) === JSON.stringify(draft());
@@ -85,7 +85,7 @@ export function createAiAssistant({ api, isSaving }) {
     if (!text && !record) { message = "aiNeedMessage"; failed = true; render(); $("ai-chat-input").focus(); return; }
     const description = record && text ? `${record}\n${text}` : record || text;
     if (description.length > 4000) { message = "aiChatLimit"; failed = true; render(); return; }
-    invalidate(); const requestVersion = ++version, snapshot = draft();
+    invalidate(); const requestVersion = ++version, snapshot = draft(), sentComposerVersion = composerVersion;
     const submitted = { title: recordTitle, description, language: lang() };
     busy = true; if (text) bubble("user", text); render();
     try {
@@ -95,7 +95,7 @@ export function createAiAssistant({ api, isSaving }) {
       result = data.analysis; source = { draft: snapshot, description, title: submitted.title };
       record = description;
       // Keep text typed during the request; clear only the message that was actually sent.
-      if ($("ai-chat-input").value.trim() === text) $("ai-chat-input").value = "";
+      if (composerVersion === sentComposerVersion && $("ai-chat-input").value.trim() === text) $("ai-chat-input").value = "";
       message = "aiReview"; bubble("assistant", result.rationale); showResult();
     } catch (error) {
       if (requestVersion !== version || error.name === "AbortError") return;
@@ -108,7 +108,7 @@ export function createAiAssistant({ api, isSaving }) {
     } }
   });
   $("ai-use-text").addEventListener("change", render);
-  $("ai-chat-input").addEventListener("input", render);
+  $("ai-chat-input").addEventListener("input", () => { composerVersion++; render(); });
   $("ai-apply").addEventListener("click", () => {
     if (!result || busy || isSaving() || $("ai-chat-input").value.trim()) return;
     if (!sameSource()) return invalidate("aiStale");

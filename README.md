@@ -64,7 +64,9 @@ explicitly uses the project's local CLI in PowerShell.
 
 ## Deployment and remaining work
 
-- Serve production traffic over HTTPS. Do not log tokens.
+- Serve production traffic over HTTPS and set `NODE_ENV=production`. Do not log tokens.
+  Development mode allows HTTP asset loading for local/LAN phone testing; production
+  retains CSP HTTPS upgrades.
 - Rate limits currently use process memory. Use a shared store for multiple
   application instances. Configure `trust proxy` only for the actual reverse
   proxy topology; do not blindly trust client IP headers.
@@ -423,3 +425,8 @@ preservation, failure/disabled fallback, photos, bilingual controls, and mobile
 layout. These tests use synthetic provider responses; they do not establish
 classification accuracy or replace evaluation on representative plant records.
 No database migration is needed for this release.
+
+## Review reports
+
+See the [2026-10-19 application bug review](docs/reviews/2026-10-19-bug-review.md)
+for reproduced defects, fixes, verification, and remaining deployment checks.

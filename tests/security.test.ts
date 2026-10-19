@@ -113,3 +113,15 @@ test('startup rejects missing and short JWT secrets', () => {
     else process.env.JWT_SECRET = original;
   }
 });
+
+test('LAN development keeps HTTP assets usable while production retains HTTPS upgrades', async () => {
+  for (const mode of ['development', 'production']) {
+    const previous = process.env.NODE_ENV;
+    let app: ReturnType<typeof createApp>;
+    try { process.env.NODE_ENV = mode; app = setup().app; }
+    finally { if (previous === undefined) delete process.env.NODE_ENV; else process.env.NODE_ENV = previous; }
+    const response = await request(app!).get('/app/').expect(200);
+    assert.equal(response.headers['content-security-policy'].includes('upgrade-insecure-requests'), mode === 'production');
+    assert.match(response.headers['content-security-policy'], /script-src 'self'/);
+  }
+});
