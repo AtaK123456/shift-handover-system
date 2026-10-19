@@ -64,7 +64,9 @@ explicitly uses the project's local CLI in PowerShell.
 
 ## Deployment and remaining work
 
-- Serve production traffic over HTTPS. Do not log tokens.
+- Serve production traffic over HTTPS and set `NODE_ENV=production`. Do not log tokens.
+  Development mode allows HTTP asset loading for local/LAN phone testing; production
+  retains CSP HTTPS upgrades.
 - Rate limits currently use process memory. Use a shared store for multiple
   application instances. Configure `trust proxy` only for the actual reverse
   proxy topology; do not blindly trust client IP headers.
@@ -325,3 +327,122 @@ Use English for branch descriptions, pull request titles and descriptions,
 commit subjects and bodies, README files, and other project documentation.
 Use the `AtaK/` prefix for new working branches. Application interface text
 continues to support both Turkish and English.
+
+## Optional AI entry assistant
+
+A fixed AI bubble in the bottom-right corner opens a floating conversation panel.
+An authenticated operator can request
+suggestions for GT1/GT2/ST equipment, event category, entry type, and human review
+priority. The result includes reasoning, literal quotes from the submitted text,
+uncertainties, and up to five missing-information questions. Unknown equipment or
+priority is explicitly shown as unclear and cannot overwrite those form fields.
+
+Write an event directly in the conversation or select **Import form draft**.
+Subsequent messages add missing details to the same analyzed record, up to 4,000
+characters total. The panel can be closed and reopened without losing the current
+conversation. Ctrl/Cmd+Enter sends a message; Enter inserts a new line.
+
+Suggestions are separate from the operator's choices. Select which equipment,
+entry-type, and priority suggestions to apply, then select **Apply selected
+suggestions**. Review or edit the fields and use **Save** to create the entry.
+Applying or dismissing AI suggestions does not save an entry or modify equipment
+status. For a conversation that differs from the form, a separate checked option
+explicitly approves transferring the analyzed text as well; unchecking it disables
+application to avoid attaching suggestions to a different record. Importing a draft
+retains its title; a new conversation uses the first sentence as an editable title.
+Editing the form source text,
+changing language, saving, resetting the form, or logging out invalidates the
+analysis and discards late results. Questions are optional and never block saving.
+Saving the form clears actionable proposals but retains conversation text and
+unsent messages. Use **Clear chat** when starting a different event.
+Escape closes the nonmodal panel and
+returns focus to its launcher. The panel supports mobile screens and both themes.
+Unsaved conversations trigger logout/navigation warnings. Expired-session drafts
+are restored only for the same account, with no restored AI proposals. Explicit
+logout clears the conversation; another account never sees it.
+
+This first release analyzes the current entry only. It does not rank the shared
+board or generate a whole-shift summary. Category, explanations, questions, and
+accept/reject feedback are not stored as an AI audit history; only the operator's
+final saved fields are persisted through the existing entry endpoint.
+
+### Configuration
+
+AI is disabled by default. Set these variables in the server's untracked `.env`
+file, then restart the server:
+
+```dotenv
+AI_ENABLED=true
+OPENAI_API_KEY="your-server-side-api-key"
+OPENAI_MODEL="gpt-4.1-mini"
+```
+
+Use a model that supports strict JSON Schema output through the OpenAI Responses
+API. Keep the key out of `public/`, commits, screenshots, and chat messages.
+OpenAI API access/billing is separate from a ChatGPT subscription. The server must
+be able to reach `https://api.openai.com` over HTTPS. Without configuration or when
+AI is unavailable, normal entry creation and photo uploads continue to work.
+
+Only an explicit Send request sends the combined record text from the conversation,
+any imported title, and UI language to OpenAI. Photos, credentials, user identities, and existing plant
+history are not sent. The interface discloses this before the button. Consider
+what operators include in free text before enabling external processing.
+Responses are requested with `store: false`; this is not a guarantee of zero
+provider retention, which depends on the provider's policies and account settings.
+The application does not add AI request/response logs or persist the analysis.
+
+### Troubleshooting AI errors
+
+A failed `/ai/analyze` request previously returned a generic HTTP 502. The chat
+now shows a specific, translated error without exposing provider response bodies
+or signing the operator out. `AI_QUOTA` means the provider reported insufficient
+API credit or a spending limit: check billing for the API project that owns the
+key. A ChatGPT subscription does not supply API credit. After changing `.env`,
+restart the server.
+
+Other codes distinguish invalid keys (`AI_KEY_INVALID`), denied access
+(`AI_ACCESS_DENIED`), an unavailable model (`AI_MODEL_UNAVAILABLE`), rejected
+request settings (`AI_CONFIGURATION`), provider throttling
+(`AI_PROVIDER_RATE_LIMIT`), connection failures (`AI_CONNECTION`), and timeouts
+(`AI_TIMEOUT`). Incomplete, refused, and invalid model output are not shown as
+usable proposals. HTTP 502 alone cannot identify which upstream failure occurred.
+
+### Boundaries and API
+
+AI is decision support, not a diagnosis or a calibrated safety/risk score. It has
+no equipment tools and cannot control equipment, close work, acknowledge a
+handover, or decide whether a turbine is safe to operate. The prompt prohibits
+invented readings/limits and operating or repair instructions. Model output can
+still be wrong; the operator must review it against approved plant procedures.
+The exact-quote validator checks that cited text exists, not that the model's
+interpretation is correct. Missing measurements do not establish low risk.
+
+Both endpoints require `Authorization: Bearer <token>`:
+
+- `GET /ai/status` returns `{ enabled }` without exposing configuration or keys.
+- `POST /ai/analyze` accepts only `{ title, description, language }`; title is at
+  most 160 characters, description is required and at most 4,000 characters, and
+  language is `tr` or `en`. Returns `{ analysis }` with `equipment`, `category`,
+  `kind`, `priority`, `rationale`, `uncertainty`, `evidence`, and `questions`.
+
+Calls are limited to 10 per authenticated user per 15 minutes and three concurrent
+provider requests per application instance. Limits are in memory; use shared
+limits and provider spending controls for a multi-instance deployment. The SDK
+uses a 20-second timeout without automatic retries, with an outer cancellation
+at 22 seconds. Provider errors, refusals, incomplete responses, invalid fields,
+and fabricated quotations return sanitized errors; no automatic fallback
+classifications are presented as AI results. Submitted text is treated as
+untrusted data in a separate message; it cannot choose the model or endpoint.
+
+Tests cover authentication, input/output bounds, exact quotation validation,
+per-user limits, concurrency, and the real SDK adapter using a simulated HTTP
+response. Browser tests cover selective application, stale responses, source
+preservation, failure/disabled fallback, photos, bilingual controls, and mobile
+layout. These tests use synthetic provider responses; they do not establish
+classification accuracy or replace evaluation on representative plant records.
+No database migration is needed for this release.
+
+## Review reports
+
+See the [2026-10-19 application bug review](docs/reviews/2026-10-19-bug-review.md)
+for reproduced defects, fixes, verification, and remaining deployment checks.

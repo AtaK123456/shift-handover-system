@@ -19,6 +19,8 @@ test.afterAll(async () => {
 });
 async function login(page: Page, index = 0) {
   await page.locator("#email").fill(emails[index]!); await page.locator("#password").fill(password); await page.locator("#login-button").click();
+  await expect(page.locator("#dashboard")).toBeVisible({ timeout: 15000 });
+  await expect(page.locator("#login-button")).toBeEnabled({ timeout: 15000 });
   await expect(page.locator("#summary-units .unit-status")).toHaveCount(3);
 }
 async function expire(page: Page) {

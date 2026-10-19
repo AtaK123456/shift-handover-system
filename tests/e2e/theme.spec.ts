@@ -37,6 +37,7 @@ test("storage restrictions do not break theme selection or authentication form",
 });
 
 test("theme is shared by login/dashboard/logout, and mobile controls fit", async ({ page }) => {
+  await page.route("**/ai/status", route => route.fulfill({ json: { enabled: false } }));
   await page.route("**/operations/**", route => route.fulfill({ json: route.request().url().endsWith("/summary") ? {
     revision: 0, equipment: [], counts: { total: 0, important: 0, VALVE: 0, ATTENTION: 0, TASK: 0 }, important: [], recent: [], activeShiftId: null, receipt: null
   } : { items: [], total: 0, page: 1, pageSize: 20 } }));
