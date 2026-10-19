@@ -325,3 +325,84 @@ Use English for branch descriptions, pull request titles and descriptions,
 commit subjects and bodies, README files, and other project documentation.
 Use the `AtaK/` prefix for new working branches. Application interface text
 continues to support both Turkish and English.
+
+## Optional AI entry assistant
+
+The entry form includes **Analyze with AI**. An authenticated operator can request
+suggestions for GT1/GT2/ST equipment, event category, entry type, and human review
+priority. The result includes reasoning, literal quotes from the submitted text,
+uncertainties, and up to five missing-information questions. Unknown equipment or
+priority is explicitly shown as unclear and cannot overwrite those form fields.
+
+Suggestions are separate from the operator's choices. Select which equipment,
+entry-type, and priority suggestions to apply, then select **Apply selected
+suggestions**. Review or edit the fields and use **Save** to create the entry.
+Applying or dismissing AI suggestions does not save an entry or modify equipment
+status. Original title/description text is preserved. Editing the source text,
+changing language, saving, resetting the form, or logging out invalidates the
+analysis and discards late results. Questions are optional and never block saving.
+
+This first release analyzes the current entry only. It does not rank the shared
+board or generate a whole-shift summary. Category, explanations, questions, and
+accept/reject feedback are not stored as an AI audit history; only the operator's
+final saved fields are persisted through the existing entry endpoint.
+
+### Configuration
+
+AI is disabled by default. Set these variables in the server's untracked `.env`
+file, then restart the server:
+
+```dotenv
+AI_ENABLED=true
+OPENAI_API_KEY="your-server-side-api-key"
+OPENAI_MODEL="gpt-4.1-mini"
+```
+
+Use a model that supports strict JSON Schema output through the OpenAI Responses
+API. Keep the key out of `public/`, commits, screenshots, and chat messages.
+OpenAI API access/billing is separate from a ChatGPT subscription. The server must
+be able to reach `https://api.openai.com` over HTTPS. Without configuration or when
+AI is unavailable, normal entry creation and photo uploads continue to work.
+
+Only an explicit analysis request sends the current title, description, and UI
+language to OpenAI. Photos, credentials, user identities, and existing plant
+history are not sent. The interface discloses this before the button. Consider
+what operators include in free text before enabling external processing.
+Responses are requested with `store: false`; this is not a guarantee of zero
+provider retention, which depends on the provider's policies and account settings.
+The application does not add AI request/response logs or persist the analysis.
+
+### Boundaries and API
+
+AI is decision support, not a diagnosis or a calibrated safety/risk score. It has
+no equipment tools and cannot control equipment, close work, acknowledge a
+handover, or decide whether a turbine is safe to operate. The prompt prohibits
+invented readings/limits and operating or repair instructions. Model output can
+still be wrong; the operator must review it against approved plant procedures.
+The exact-quote validator checks that cited text exists, not that the model's
+interpretation is correct. Missing measurements do not establish low risk.
+
+Both endpoints require `Authorization: Bearer <token>`:
+
+- `GET /ai/status` returns `{ enabled }` without exposing configuration or keys.
+- `POST /ai/analyze` accepts only `{ title, description, language }`; title is at
+  most 160 characters, description is required and at most 4,000 characters, and
+  language is `tr` or `en`. Returns `{ analysis }` with `equipment`, `category`,
+  `kind`, `priority`, `rationale`, `uncertainty`, `evidence`, and `questions`.
+
+Calls are limited to 10 per authenticated user per 15 minutes and three concurrent
+provider requests per application instance. Limits are in memory; use shared
+limits and provider spending controls for a multi-instance deployment. The SDK
+uses a 20-second timeout without automatic retries, with an outer cancellation
+at 22 seconds. Provider errors, refusals, incomplete responses, invalid fields,
+and fabricated quotations return sanitized errors; no automatic fallback
+classifications are presented as AI results. Submitted text is treated as
+untrusted data in a separate message; it cannot choose the model or endpoint.
+
+Tests cover authentication, input/output bounds, exact quotation validation,
+per-user limits, concurrency, and the real SDK adapter using a simulated HTTP
+response. Browser tests cover selective application, stale responses, source
+preservation, failure/disabled fallback, photos, bilingual controls, and mobile
+layout. These tests use synthetic provider responses; they do not establish
+classification accuracy or replace evaluation on representative plant records.
+No database migration is needed for this release.

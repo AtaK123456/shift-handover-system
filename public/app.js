@@ -1,3 +1,4 @@
+import { createAiAssistant } from "./ai-assistant.js";
 import { t, locale, lang, apiError, initializeLanguage } from "./i18n.js";
 const $ = id => document.getElementById(id);
 let token = null, user = null, current, signingUp = false, shiftBusy = false, loading = false, exporting = false;
@@ -7,6 +8,7 @@ let board = { items: [], page: 1, total: 0 }, history = { items: [], page: 1, to
 let operationsVersion = 0, summary = null, summaryBusy = false;
 let selectedPhotos = [], interruptedDraft = null, entrySending = false;
 let operationFilters = new URLSearchParams();
+const aiAssistant = createAiAssistant({ api, isSaving: () => entrySending });
 const df = () => new Intl.DateTimeFormat(locale(), { timeZone: "Europe/Istanbul", day: "2-digit", month: "short", year: "numeric" });
 const tf = () => new Intl.DateTimeFormat(locale(), { timeZone: "Europe/Istanbul", hour: "2-digit", minute: "2-digit" });
 const localDate = value => new Intl.DateTimeFormat("sv-SE", { timeZone: "Europe/Istanbul" }).format(new Date(value));
@@ -21,6 +23,7 @@ function logout({ preserveDraft = false } = {}) {
     values: Object.fromEntries(["entry-kind", "entry-priority", "entry-unit", "entry-title", "entry-description"].map(id => [id, $(id).value])),
     files: selectedPhotos.map(item => item.file) };
   if (!preserveDraft) interruptedDraft = null;
+  aiAssistant.reset();
   summary = null; operationFilters = new URLSearchParams();
   session.abort(); session = new AbortController(); token = null; user = null; current = undefined; listVersion++; operationsVersion++;
   document.querySelectorAll("dialog[open]").forEach(dialog => dialog.close()); releasePhoto();
@@ -75,7 +78,7 @@ $("login-form").addEventListener("submit", async event => {
       }
       interruptedDraft = null;
     }
-    await Promise.all([loadCurrent(), loadHistory(), loadOperations()]);
+    await Promise.all([loadCurrent(), loadHistory(), loadOperations(), aiAssistant.load()]);
   } catch (error) { showError(error instanceof TypeError ? new Error(t("connection")) : error); }
   finally { $("login-button").disabled = false; $("switch-auth").disabled = false; }
 });
@@ -208,13 +211,14 @@ $("entry-form").addEventListener("submit", async event => {
   event.preventDefault();
   if (entrySending) return;
   if (selectedPhotos.length > 3 || selectedPhotos.some(item => item.file.size > 5 * 1024 * 1024)) return notify(t("photoLimit"), true);
+  aiAssistant.beforeSave();
   const body = new FormData($("entry-form")); body.delete("photos");
   selectedPhotos.forEach(item => body.append("photos", item.file));
   const controls = [...$("entry-form").querySelectorAll("input,select,textarea,button"), ...document.querySelectorAll("[data-quick-kind]")].map(element => ({ element, disabled: element.disabled }));
   entrySending = true; controls.forEach(({ element }) => { element.disabled = true; }); $("entry-save").textContent = t("saveProgress");
   try { await api("/operations/entries", { method: "POST", body }); $("entry-form").reset(); board.page = 1; history.page = 1; notify(t("entrySaved")); await loadOperations(); }
   catch (error) { showError(error); }
-  finally { entrySending = false; controls.forEach(({ element, disabled }) => { element.disabled = disabled; }); $("entry-save").textContent = t("save"); }
+  finally { entrySending = false; controls.forEach(({ element, disabled }) => { element.disabled = disabled; }); $("entry-save").textContent = t("save"); aiAssistant.render(); }
 });
 $("close-form").addEventListener("submit", async event => {
   event.preventDefault(); $("close-save").disabled = true;

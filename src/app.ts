@@ -1,4 +1,6 @@
 import { createOperationsRouter } from "./routes/operations.js";
+import { createAiRouter } from "./routes/ai.js";
+import type { Analyzer } from "./services/ai-analysis.js";
 import { shiftSchedule } from "./services/schedule.js";
 import multer from "multer";
 import { fileURLToPath } from "node:url";
@@ -24,7 +26,7 @@ function credentials(body: unknown, registration = false) {
   return { email, password, name: typeof name === "string" ? name.trim() : "" };
 }
 
-export function createApp(prisma: PrismaClient, secret: string) {
+export function createApp(prisma: PrismaClient, secret: string, options: { analyzer?: Analyzer | null } = {}) {
   const app = express();
   const authenticate = authenticateToken(prisma, secret);
   const shifts = createShiftService(prisma);
@@ -108,6 +110,7 @@ export function createApp(prisma: PrismaClient, secret: string) {
     res.setHeader("Content-Disposition", `attachment; filename="vardiyalar-${date}.xlsx"`);
     res.send(Buffer.from(buffer));
   });
+  app.use("/ai", authenticate, createAiRouter(options.analyzer));
   app.use("/operations", authenticate, createOperationsRouter(prisma));
   const errorHandler: ErrorRequestHandler = (error, _req, res, _next) => {
     if (error instanceof multer.MulterError) return res.status(400).json({ error: "En fazla 3 fotoğraf, fotoğraf başına en fazla 5 MB yükleyin." });
