@@ -1,8 +1,8 @@
 import { Router } from "express";
 import { rateLimit } from "express-rate-limit";
-import { aiFailure, createOpenAiAnalyzer, validateAnalysis, type AnalysisInput, type Analyzer } from "../services/ai-analysis.js";
+import { aiFailure, createOpenAiAnalyzer, validateAnalysis, type AnalysisInput, type Analyzer, type EquipmentContext } from "../services/ai-analysis.js";
 
-export function createAiRouter(analyzer: Analyzer | null = createOpenAiAnalyzer()) {
+export function createAiRouter(analyzer: Analyzer | null = createOpenAiAnalyzer(), catalog?: () => Promise<EquipmentContext[]>) {
   const router = Router();
   router.get("/status", (_req, res) => { res.json({ enabled: Boolean(analyzer) }); });
   const limit = rateLimit({ windowMs: 15 * 60 * 1000, limit: 10,
@@ -28,6 +28,7 @@ export function createAiRouter(analyzer: Analyzer | null = createOpenAiAnalyzer(
     res.once("close", cancel);
     inFlight++;
     try {
+      if (catalog) input.equipmentCatalog = await catalog();
       const analysis = await analyzer(input, controller.signal);
       res.json({ analysis: validateAnalysis(analysis, input) });
     } catch (error) {

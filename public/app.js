@@ -1,3 +1,4 @@
+import { createEquipmentCatalog, equipmentLabel } from "./equipment-catalog.js";
 import { createWorkspace } from "./workspace.js";
 import { createAiAssistant } from "./ai-assistant.js";
 import { t, locale, lang, apiError, initializeLanguage } from "./i18n.js";
@@ -15,6 +16,7 @@ const tf = () => new Intl.DateTimeFormat(locale(), { timeZone: "Europe/Istanbul"
 const localDate = value => new Intl.DateTimeFormat("sv-SE", { timeZone: "Europe/Istanbul" }).format(new Date(value));
 const stamp = value => value ? `${df().format(new Date(value))} · ${tf().format(new Date(value))}` : "—";
 const workspace = createWorkspace({ authenticated: () => Boolean(token), stamp });
+const catalog = createEquipmentCatalog({ api, getUser: () => user, onSaved: async () => { await loadOperations(); notify(t("catalogSaved")); } });
 function node(tag, text, className) { const el = document.createElement(tag); if (text !== undefined) el.textContent = text; if (className) el.className = className; return el; }
 function notify(message, error = false) { const el = token ? $("dashboard-message") : $("auth-message"); el.textContent = message; el.classList.toggle("error", error); }
 function showError(error) { if (error.name !== "AbortError") notify(error.message || t("failed"), true); }
@@ -25,7 +27,7 @@ function logout({ preserveDraft = false } = {}) {
     values: Object.fromEntries(["entry-kind", "entry-priority", "entry-unit", "entry-title", "entry-description"].map(id => [id, $(id).value])),
     files: selectedPhotos.map(item => item.file), chat: aiAssistant.snapshot() };
   if (!preserveDraft) interruptedDraft = null;
-  aiAssistant.reset(); workspace.reset();
+  aiAssistant.reset(); workspace.reset(); catalog.reset();
   summary = null; renderSummary(); operationFilters = new URLSearchParams();
   session.abort(); session = new AbortController(); token = null; user = null; current = undefined; listVersion++; currentVersion++; operationsVersion++;
   document.querySelectorAll("dialog[open]").forEach(dialog => dialog.close()); releasePhoto();
@@ -80,7 +82,7 @@ $("login-form").addEventListener("submit", async event => {
     applied = new URLSearchParams(); page = 1; workspace.start(); renderIdentity(); renderCurrent();
     if (interruptedDraft) {
       if (interruptedDraft.ownerId === user.id) {
-        for (const [id, value] of Object.entries(interruptedDraft.values)) $(id).value = value;
+        for (const [id, value] of Object.entries(interruptedDraft.values)) { if (id === "entry-unit") catalog.selectValue(value); else $(id).value = value; }
         addPhotos(interruptedDraft.files); aiAssistant.restore(interruptedDraft.chat); notify(t("draftRestored"));
       }
       interruptedDraft = null;
@@ -169,20 +171,25 @@ $("export-button").addEventListener("click", async () => {
   finally { exporting = false; $("export-label").textContent = t("export"); updateControls(); }
 });
 function renderEquipment() {
+  catalog.render(equipment);
   $("equipment-grid").replaceChildren(...equipment.map(item => {
     const card = node("article", undefined, "equipment-card"); const heading = node("div", undefined, "section-title"); heading.append(node("h3", item.code), node("span", t(item.status), `unit-status unit-${item.status.toLowerCase()}`));
-    card.append(heading, node("p", item.note || "—", "equipment-note"), node("p", item.updatedAt ? `${item.updatedBy?.name || "—"} · ${stamp(item.updatedAt)}` : t("neverUpdated"), "hint"));
+    card.append(heading); if (item.name && item.name !== item.code) card.append(node("p", item.name, "equipment-name"));
+    card.append(node("p", item.note || "—", "equipment-note"), node("p", item.updatedAt ? `${item.updatedBy?.name || "—"} · ${stamp(item.updatedAt)}` : t("neverUpdated"), "hint"));
     const button = node("button", t("update"), "button secondary small"); button.type = "button";
-    button.addEventListener("click", () => { selectedEquipment = { ...item }; $("equipment-dialog-title").textContent = `${item.code} · ${t("update")}`; $("equipment-status").value = item.status; $("equipment-note").value = item.note; $("equipment-message").textContent = ""; $("equipment-dialog").showModal(); });
-    card.append(button); return card;
+    button.addEventListener("click", () => { selectedEquipment = { ...item }; $("equipment-dialog-title").textContent = `${equipmentLabel(item)} · ${t("update")}`; $("equipment-status").value = item.status; $("equipment-note").value = item.note; $("equipment-message").textContent = ""; $("equipment-dialog").showModal(); });
+    card.append(button);
+    if (user?.role === "MANAGER") { const rename = node("button", t("catalogRename"), "text-button catalog-rename"); rename.type = "button"; rename.addEventListener("click", () => catalog.open(item)); card.append(rename); }
+    return card;
   }));
 }
 async function viewPhoto(id) {
   try { const response = await api(`/operations/photos/${encodeURIComponent(id)}`); const blob = await response.blob(); if (!token) return; releasePhoto(); photoUrl = URL.createObjectURL(blob); $("entry-photo").src = photoUrl; $("entry-photo").alt = t("photo"); $("photo-dialog").showModal(); } catch (error) { showError(error); }
 }
+const equipmentText = code => code ? equipmentLabel(equipment.find(item => item.code === code) || { code }) : t("general");
 function entryCard(item) {
   const card = node("article", undefined, `entry-card${item.priority === "HIGH" ? " important" : ""}`);
-  const meta = node("div", undefined, "entry-meta"); meta.append(node("span", t(item.kind), "entry-kind"), node("span", item.equipmentCode || t("general"), "status")); if (item.priority === "HIGH") meta.append(node("span", t("HIGH"), "priority-high")); if (item.closedAt) meta.append(node("span", t("closed"), "status"));
+  const meta = node("div", undefined, "entry-meta"); meta.append(node("span", t(item.kind), "entry-kind"), node("span", equipmentText(item.equipmentCode), "status")); if (item.priority === "HIGH") meta.append(node("span", t("HIGH"), "priority-high")); if (item.closedAt) meta.append(node("span", t("closed"), "status"));
   card.append(meta, node("h3", item.title), node("p", item.description, "entry-description"), node("p", `${item.author.name} · ${stamp(item.createdAt)}${item.shiftId ? ` · #${item.shiftId}` : ""}`, "hint"));
   const actions = node("div", undefined, "entry-actions");
   item.photos.forEach((photo, index) => { const button = node("button", t("viewPhoto", { number: index + 1 }), "button quiet small"); button.type = "button"; button.addEventListener("click", () => viewPhoto(photo.id)); actions.append(button); });
@@ -266,11 +273,11 @@ function renderSummary() {
     $("summary-read-status").textContent = t("summaryLoading"); $("summary-read").textContent = t("summaryRead");
     $("summary-read").disabled = true; return;
   }
-  $("summary-units").replaceChildren(...summary.equipment.map(item => node("span", `${item.code} · ${t(item.status)}`, `unit-status unit-${item.status.toLowerCase()}`)));
+  $("summary-units").replaceChildren(...summary.equipment.map(item => node("span", `${equipmentLabel(item)} · ${t(item.status)}`, `unit-status unit-${item.status.toLowerCase()}`)));
   $("summary-counts").replaceChildren(...[["summaryOpen", summary.counts.total], ["summaryImportant", summary.counts.important], ["summaryValves", summary.counts.VALVE], ["summaryTasks", summary.counts.TASK]].map(([key, value]) => {
     const card = node("div", undefined, "summary-stat"); card.append(node("strong", value), node("span", t(key))); return card;
   }));
-  $("summary-important").replaceChildren(...(summary.important.length ? summary.important.map(item => node("li", `${item.equipmentCode || t("general")} · ${item.title}`)) : [node("li", t("noImportant"))]));
+  $("summary-important").replaceChildren(...(summary.important.length ? summary.important.map(item => node("li", `${equipmentText(item.equipmentCode)} · ${item.title}`)) : [node("li", t("noImportant"))]));
   $("summary-recent").replaceChildren(...(summary.recent.length ? summary.recent.map(item => node("li", `${t(item.kind)} · ${item.title}`)) : [node("li", t("noEntries"))]));
   const read = summary.receipt?.revision === summary.revision;
   $("summary-read").disabled = summaryBusy || !summary.activeShiftId || read;
@@ -320,4 +327,4 @@ $("operations-filter").addEventListener("submit", async event => {
   history.page = 1; await loadOperations();
 });
 $("operations-clear").addEventListener("click", async () => { $("operations-filter").reset(); operationFilters = new URLSearchParams(); history.page = 1; await loadOperations(); });
-initializeLanguage(); workspace.start(); renderAuth(); renderPhotos();
+initializeLanguage(); workspace.start(); renderAuth(); renderPhotos(); catalog.reset();

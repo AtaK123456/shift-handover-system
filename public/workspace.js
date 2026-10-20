@@ -1,3 +1,4 @@
+import { equipmentLabel } from "./equipment-catalog.js";
 import { t } from "./i18n.js";
 const $ = id => document.getElementById(id);
 const pages = { overview: ["navOverview", "overviewHint"], "new-record": ["navNew", "newRecordHint"], handover: ["navHandover", "handoverPageHint"], history: ["navHistory", "historyPageHint"] };
@@ -20,12 +21,13 @@ export function createWorkspace({ authenticated, stamp }) {
   // AI remains available on every page; applying suggestions brings the form into view.
   window.addEventListener("ai-entry-applied", () => open("new-record"));
   $("overview-detail-board").addEventListener("click", () => $("overview-dialog").close());
+  const equipmentText = code => code ? equipmentLabel(snapshot.summary?.equipment.find(item => item.code === code) || { code }) : t("general");
   function details(item) {
     $("overview-detail-title").textContent = item.title;
     $("overview-detail-board").href = ["EVENT", "NOTE"].includes(item.kind) ? "#history" : "#handover";
     $("overview-detail-board").dataset.i18n = ["EVENT", "NOTE"].includes(item.kind) ? "openHistory" : "openHandover";
     $("overview-detail-board").textContent = t($("overview-detail-board").dataset.i18n);
-    $("overview-detail-meta").textContent = `${item.equipmentCode || t("general")} · ${t(item.kind)} · ${item.createdAt ? stamp(item.createdAt) : "—"}`;
+    $("overview-detail-meta").textContent = `${equipmentText(item.equipmentCode)} · ${t(item.kind)} · ${item.createdAt ? stamp(item.createdAt) : "—"}`;
     $("overview-detail-description").textContent = item.description || t("detailsInHandover");
     $("overview-dialog").showModal();
   }
@@ -39,7 +41,8 @@ export function createWorkspace({ authenticated, stamp }) {
     $("overview-equipment").replaceChildren(...(summary?.equipment || []).map(item => {
       const card = make("article", undefined, "equipment-card"); const head = make("div", undefined, "section-title");
       head.append(make("h3", item.code), make("span", t(item.status), `unit-status unit-${item.status.toLowerCase()}`));
-      card.append(head, make("p", item.note || "—", "equipment-note"), make("p", item.updatedAt ? stamp(item.updatedAt) : t("neverUpdated"), "hint"));
+      card.append(head); if (item.name && item.name !== item.code) card.append(make("p", item.name, "equipment-name"));
+      card.append(make("p", item.note || "—", "equipment-note"), make("p", item.updatedAt ? stamp(item.updatedAt) : t("neverUpdated"), "hint"));
       return card;
     }));
     for (const [key, items, count] of [["important", summary?.important, summary?.counts.important], ["tasks", summary?.tasks, summary?.counts.TASK], ["valves", summary?.valves, summary?.counts.VALVE], ["recent", summary?.recent, summary?.recent.length]]) {
@@ -47,7 +50,7 @@ export function createWorkspace({ authenticated, stamp }) {
       if (!summary) { list.replaceChildren(make("p", t("summaryLoading"), "hint")); continue; }
       const children = (items || []).map(item => {
         const button = make("button", undefined, `observation-card${item.priority === "HIGH" ? " important" : ""}`); button.type = "button";
-        const meta = make("span", `${item.equipmentCode || t("general")} · ${t(item.kind)}${item.priority === "HIGH" ? ` · ${t("HIGH")}` : ""}`, "entry-meta");
+        const meta = make("span", `${equipmentText(item.equipmentCode)} · ${t(item.kind)}${item.priority === "HIGH" ? ` · ${t("HIGH")}` : ""}`, "entry-meta");
         button.append(meta, make("strong", item.title), make("span", item.description || t("viewDetails"), "observation-excerpt"));
         if (item.createdAt) button.append(make("span", stamp(item.createdAt), "hint"));
         button.addEventListener("click", () => details(item)); return button;

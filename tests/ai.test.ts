@@ -7,16 +7,17 @@ import { createApp } from "../src/app.js";
 import { aiFailure, createOpenAiAnalyzer, validateAnalysis, type Analyzer, type AnalysisInput } from "../src/services/ai-analysis.js";
 import type { PrismaClient } from "../src/generated/prisma/client.js";
 const secret = "ai-test-secret-".repeat(4);
-const input: AnalysisInput = { title: "GT1 vibration", description: "GT1 vibration increased. Maintenance review requested.", language: "en" };
+const input: AnalysisInput = { title: "GT1 vibration", description: "GT1 vibration increased. Maintenance review requested.", language: "en", equipmentCatalog: ["GT1", "GT2", "ST"].map(code => ({ code, name: code })) };
+const publicInput = { title: input.title, description: input.description, language: input.language };
 const proposal = { equipment: "GT1", category: "VIBRATION", kind: "ATTENTION", priority: "HIGH",
   rationale: "A reported abnormal condition needs review.", uncertainty: "No measured value or plant limits provided.",
   evidence: ["GT1 vibration increased."], questions: ["What was the measured vibration?"] } as const;
 function setup(analyzer: Analyzer | null) {
-  const db = { user: { findUnique: async ({ where }: any) => where.id === 2 ? null : { id: where.id, role: "WORKER" } } } as unknown as PrismaClient;
+  const db = { equipment: { findMany: async () => ["GT1", "GT2", "ST"].map(code => ({ code, name: code })) }, user: { findUnique: async ({ where }: any) => where.id === 2 ? null : { id: where.id, role: "WORKER" } } } as unknown as PrismaClient;
   return createApp(db, secret, { analyzer });
 }
 const bearer = (id = 1) => `Bearer ${jwt.sign({ id }, secret, { expiresIn: "1h" })}`;
-const send = (app: ReturnType<typeof createApp>, body: unknown = input, id = 1) => request(app).post("/ai/analyze").set("Authorization", bearer(id)).send(body);
+const send = (app: ReturnType<typeof createApp>, body: unknown = input, id = 1) => request(app).post("/ai/analyze").set("Authorization", bearer(id)).send(body === input ? { title: input.title, description: input.description, language: input.language } : body);
 const analyzer: Analyzer = async () => structuredClone(proposal) as any;
 
 test("AI endpoints require a current authenticated account", async () => {
@@ -35,9 +36,9 @@ test("AI stays optional when unconfigured", async () => {
 });
 test("AI input is bounded and rejects extra fields before calling the provider", async () => {
   let calls = 0; const app = setup(async () => { calls++; return analyzer(input); });
-  for (const body of [{}, { ...input, description: " " }, { ...input, title: "x".repeat(161) },
-    { ...input, description: "x".repeat(4001) }, { ...input, language: "jp" },
-    { ...input, photos: ["photo"] }, { ...input, userId: 999 }, { ...input, title: [] }]) {
+  for (const body of [{}, { ...publicInput, description: " " }, { ...publicInput, title: "x".repeat(161) },
+    { ...publicInput, description: "x".repeat(4001) }, { ...publicInput, language: "jp" },
+    { ...publicInput, photos: ["photo"] }, { ...publicInput, userId: 999 }, { ...publicInput, title: [] }]) {
     await send(app, body).expect(400, { error: "AI_INVALID_INPUT" });
   }
   assert.equal(calls, 0);
@@ -46,7 +47,7 @@ test("analysis returns proposals without writing operations or equipment", async
   let received: AnalysisInput | undefined;
   const app = setup(async value => { received = value; return analyzer(value); });
   await send(app).expect(200, { analysis: proposal });
-  assert.deepEqual(received, input);
+  assert.deepEqual(received, { ...input, equipmentCatalog: ["GT1", "GT2", "ST"].map(code => ({ code, name: code })) });
 });
 test("provider errors, fabricated evidence, and malformed results fail safely", async () => {
   const bad = [async () => { throw new Error("secret-provider-key and private-plant-record"); },
@@ -140,4 +141,19 @@ test("incomplete, refused, and invalid provider responses remain distinct and ne
 test("connection and timeout errors use safe codes", () => {
   assert.deepEqual(aiFailure(new OpenAI.APIConnectionTimeoutError()), { error: "AI_TIMEOUT", status: 504 });
   assert.deepEqual(aiFailure(new OpenAI.APIConnectionError({ message: "private connection detail" })), { error: "AI_CONNECTION", status: 503 });
+});
+
+test("AI schema and validation use configured work areas rather than fixed turbine codes", async () => {
+  const context = { ...input, equipmentCatalog: [{ code: "DEPOT-A", name: "Warehouse A" }] };
+  assert.equal(validateAnalysis({ ...proposal, equipment: "DEPOT-A" }, context).equipment, "DEPOT-A");
+  assert.throws(() => validateAnalysis({ ...proposal, equipment: "GT1" }, context));
+  let sent: any;
+  const adapter = createOpenAiAnalyzer({ AI_ENABLED: "true", OPENAI_API_KEY: "test-key" }, async (_url, options) => {
+    sent = JSON.parse(String(options?.body));
+    return new Response(JSON.stringify({ id: "resp_test", object: "response", status: "completed", output: [{ type: "message", role: "assistant", content: [{ type: "output_text", text: JSON.stringify({ ...proposal, equipment: "DEPOT-A" }) }] }] }), { headers: { "Content-Type": "application/json" } });
+  });
+  assert.equal((await adapter!(context)).equipment, "DEPOT-A");
+  assert.deepEqual(sent.text.format.schema.properties.equipment.enum, ["DEPOT-A", "GENERAL", "UNKNOWN"]);
+  assert.deepEqual(JSON.parse(sent.input[1].content).equipmentCatalog, context.equipmentCatalog);
+  assert.doesNotMatch(sent.input[0].content, /GT1 and GT2 are gas turbines/);
 });

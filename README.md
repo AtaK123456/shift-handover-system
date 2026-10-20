@@ -220,7 +220,7 @@ still works for the current page and falls back to the device preference next ti
 ## Workspace navigation
 
 After sign-in, **Overview** shows the current shift, important open records,
-GT1/GT2/ST statuses, ongoing tasks, active valves, and recent events/notes.
+configured equipment/work-area statuses, ongoing tasks, active valves, and recent events/notes.
 It contains observation cards and links to the work pages; it does not expose
 record forms, equipment updates, shift start/end, closure, or acknowledgment
 controls. Clicking a record opens read-only details.
@@ -246,11 +246,54 @@ important/task/valve/recent preview is capped at five records; task and valve
 counts come from the same summary transaction, independent of board pagination.
 Complete equipment notes and work controls are available in Handover. The summary
 API additionally returns bounded `tasks` and `valves` previews, and existing
-previews include descriptions and timestamps. No database migration is required.
+previews include descriptions and timestamps. Navigation itself adds no migration;
+apply the equipment-catalog migration described below when updating this version.
+
+## Configurable equipment and work areas — phase one
+
+The equipment catalog is configurable for the current, single shared workplace.
+On **Handover**, managers can choose **Add equipment / area**, assign a stable
+reference code, and enter a display name such as `DEPOT-A` / `Warehouse A`.
+Managers can edit display names; codes remain immutable so existing entries,
+equipment-change history, and handover snapshots retain their links. No delete
+or archive action is provided in this phase. Workers can update operational
+status and create entries against configured codes, but cannot create or rename
+catalog definitions. Authorization uses the current database role.
+
+Codes are case-sensitive uppercase ASCII: 1–30 characters, starting with A–Z,
+followed by letters, numbers, hyphens or underscores. `GENERAL` and `UNKNOWN` are
+reserved. Display names contain 1–100 characters. Up to 100 definitions can be
+created; concurrent creates share the operations revision lock so the limit
+cannot be exceeded. Rename uses optimistic version checks. Name changes do not
+change the last operational-status timestamp or status note.
+
+Overview cards, entry choices, record filters, handover summaries, and AI use the
+configured catalog. Code/name labels are rendered as text. Refreshing or changing
+language preserves selected codes and unsaved entry text/photos. AI receives the
+server-owned code/name catalog only when analysis is explicitly requested; it
+cannot accept a browser-supplied catalog or propose an unknown code. As before,
+photos, user identities, and historical plant records are not sent.
+
+Apply migration `20261020000100_equipment_catalog_names` before starting this
+version. It adds `Equipment.name`, initially populated from each existing code;
+GT1, GT2, ST and their existing relations remain intact. Stop the running server,
+back up the database, then run `npx prisma migrate deploy`, `npm run build`, and
+`npm run dev`. No new npm dependencies are required. Existing accounts and roles
+are retained; public registration continues to create workers only.
+
+Catalog endpoints require authentication:
+- `GET /operations/equipment`: list configured definitions.
+- `POST /operations/equipment`: manager only; `{ code, name }`.
+- `PATCH /operations/equipment/:code`: manager only; `{ name, version }`.
+- `PUT /operations/equipment/:code`: existing operational status update.
+
+This phase does not implement organization isolation, multi-location permissions,
+custom shift times, leave, or automatic scheduling. All accounts still share one
+workplace; do not onboard unrelated organizations into the same deployment.
 
 ## Plant handover dashboard
 
-- GT1/GT2 gas turbines and the ST steam turbine support **Unspecified / Active /
+- Configured equipment/work areas (initially GT1, GT2, ST) support **Unspecified / Active /
   Inactive / Maintenance** status, with a note, updater, and timestamp. Status
   is entered manually; no unit is assumed active on a new installation. Changes
   are retained in `EquipmentChange`. Updates based on an outdated version return
@@ -311,7 +354,7 @@ the user and active shift. Previous acknowledgment records remain unchanged.
 ### Quick entries and photos
 
 Event, valve, task, and attention shortcuts prepare the form without deleting
-existing text. Optional GT1/GT2/ST selection tags an entry with its equipment.
+existing text. Optional configured equipment/work-area selection tags an entry with its stable code.
 Older or untagged entries appear as **General / shared**.
 
 Choose photos from the gallery or use **Take photo** on a supported phone.
@@ -342,7 +385,7 @@ Search filters do not hide records from the separate open handover board.
 GET /operations/entries?view=all&q=pump&equipment=GT1&kind=TASK&status=open&from=2026-10-01&to=2026-10-31&page=1
 ```
 
-Supported values: `equipment=GT1|GT2|ST|GENERAL`,
+Supported values: `equipment=<configured-code>|GENERAL`,
 `kind=EVENT|NOTE|VALVE|ATTENTION|TASK`, and `status=open|closed`.
 Filters are optional. Responses contain 20 records per page. Existing
 `view=open` and `view=history` behavior is preserved. Prisma parameterizes queries;
@@ -363,7 +406,7 @@ continues to support both Turkish and English.
 
 A fixed AI bubble in the bottom-right corner opens a floating conversation panel.
 An authenticated operator can request
-suggestions for GT1/GT2/ST equipment, event category, entry type, and human review
+suggestions for configured equipment/work areas, event category, entry type, and human review
 priority. The result includes reasoning, literal quotes from the submitted text,
 uncertainties, and up to five missing-information questions. Unknown equipment or
 priority is explicitly shown as unclear and cannot overwrite those form fields.
@@ -415,7 +458,7 @@ be able to reach `https://api.openai.com` over HTTPS. Without configuration or w
 AI is unavailable, normal entry creation and photo uploads continue to work.
 
 Only an explicit Send request sends the combined record text from the conversation,
-any imported title, and UI language to OpenAI. Photos, credentials, user identities, and existing plant
+any imported title, UI language, and the configured code/name catalog to OpenAI. Photos, credentials, user identities, and existing plant
 history are not sent. The interface discloses this before the button. Consider
 what operators include in free text before enabling external processing.
 Responses are requested with `store: false`; this is not a guarantee of zero
@@ -471,7 +514,8 @@ response. Browser tests cover selective application, stale responses, source
 preservation, failure/disabled fallback, photos, bilingual controls, and mobile
 layout. These tests use synthetic provider responses; they do not establish
 classification accuracy or replace evaluation on representative plant records.
-No database migration is needed for this release.
+The AI integration itself adds no migration; the configurable equipment catalog
+requires the equipment-name migration described above.
 
 ## Review reports
 

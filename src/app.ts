@@ -114,7 +114,7 @@ export function createApp(prisma: PrismaClient, secret: string, options: { analy
     res.setHeader("Content-Disposition", `attachment; filename="vardiyalar-${date}.xlsx"`);
     res.send(Buffer.from(buffer));
   });
-  app.use("/ai", authenticate, createAiRouter(options.analyzer));
+  app.use("/ai", authenticate, createAiRouter(options.analyzer, () => prisma.equipment.findMany({ orderBy: { code: "asc" }, select: { code: true, name: true } })));
   app.use("/operations", authenticate, createOperationsRouter(prisma));
   const errorHandler: ErrorRequestHandler = (error, _req, res, _next) => {
     if (error instanceof multer.MulterError) return res.status(400).json({ error: "En fazla 3 fotoğraf, fotoğraf başına en fazla 5 MB yükleyin." });
