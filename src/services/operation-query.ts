@@ -1,4 +1,3 @@
-import { validEquipmentCode } from "./equipment-catalog.js";
 import type { Request } from "express";
 import { EntryKind, type Prisma } from "../generated/prisma/client.js";
 import { parseShiftDate, RequestError } from "./shift-query.js";
@@ -18,7 +17,7 @@ export function operationQuery(query: Request["query"]) {
     }
   }
   if (kind !== undefined) { if (typeof kind !== "string" || !Object.values(EntryKind).includes(kind as EntryKind)) throw invalid(); conditions.push({ kind: kind as EntryKind }); }
-  if (equipment !== undefined) { if (equipment !== "GENERAL" && !validEquipmentCode(equipment)) throw invalid(); conditions.push({ equipmentCode: equipment === "GENERAL" ? null : equipment }); }
+  if (equipment !== undefined) { if (typeof equipment !== "string" || !["GT1", "GT2", "ST", "GENERAL"].includes(equipment)) throw invalid(); conditions.push({ equipmentCode: equipment === "GENERAL" ? null : equipment }); }
   if (status !== undefined) { if (status !== "open" && status !== "closed") throw invalid(); conditions.push(status === "open" ? { closedAt: null, kind: { in: [EntryKind.VALVE, EntryKind.ATTENTION, EntryKind.TASK] } } : { closedAt: { not: null } }); }
   const start = from === undefined ? undefined : parseShiftDate(from), end = to === undefined ? undefined : parseShiftDate(to);
   if (start === null || end === null || (start && end && start > end)) throw invalid();

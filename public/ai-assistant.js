@@ -43,7 +43,6 @@ export function createAiAssistant({ api, isSaving }) {
     while ($("ai-messages").children.length > 10) $("ai-messages").firstElementChild.remove();
     scroll();
   }
-  const equipmentAvailable = () => result && (result.equipment === "GENERAL" || [...$("entry-unit").options].some(option => option.value === result.equipment));
   function showResult() {
     const details = $("ai-details"); details.replaceChildren(); const list = document.createElement("dl");
     for (const [label, value] of [["unit", result.equipment === "GENERAL" ? t("general") : result.equipment === "UNKNOWN" ? t("aiUnknown") : result.equipment],
@@ -51,13 +50,12 @@ export function createAiAssistant({ api, isSaving }) {
       ["aiReviewPriority", t(result.priority === "UNKNOWN" ? "aiUnknown" : result.priority)], ["aiReason", result.rationale], ["aiUncertainty", result.uncertainty]]) {
       list.append(element("dt", t(label)), element("dd", value));
     }
-    if (result.equipment !== "UNKNOWN" && !equipmentAvailable()) details.append(element("p", t("aiEquipmentMissing"), "hint"));
     details.append(list, element("h4", t("aiEvidence")));
     const evidence = document.createElement("ul"); result.evidence.forEach(quote => evidence.append(element("li", quote))); details.append(evidence);
     details.append(element("h4", t("aiQuestions")));
     const questions = document.createElement("ul"); result.questions.forEach(question => questions.append(element("li", question)));
     details.append(result.questions.length ? questions : element("p", t("aiNoQuestions")));
-    for (const [id, valid] of [["ai-use-unit", result.equipment !== "UNKNOWN" && equipmentAvailable()], ["ai-use-kind", true], ["ai-use-priority", result.priority !== "UNKNOWN"]]) {
+    for (const [id, valid] of [["ai-use-unit", result.equipment !== "UNKNOWN"], ["ai-use-kind", true], ["ai-use-priority", result.priority !== "UNKNOWN"]]) {
       $(id).disabled = !valid; $(id).checked = valid;
     }
     $("ai-text-option").hidden = !needsText(); $("ai-use-text").checked = Boolean(needsText());
@@ -118,7 +116,6 @@ export function createAiAssistant({ api, isSaving }) {
   $("ai-apply").addEventListener("click", () => {
     if (!result || busy || isSaving() || $("ai-chat-input").value.trim()) return;
     if (!sameSource()) return invalidate("aiStale");
-    if ($("ai-use-unit").checked && !equipmentAvailable()) return invalidate("aiEquipmentMissing");
     if (needsText() && !$("ai-use-text").checked) return;
     if (needsText()) {
       $("entry-description").value = source.description;

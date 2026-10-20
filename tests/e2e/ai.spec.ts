@@ -8,7 +8,7 @@ const proposal = { equipment: "GT1", category: "VIBRATION", kind: "ATTENTION", p
 async function signIn(page: Page, enabled = true) {
   await page.route("**/ai/status", route => route.fulfill({ json: { enabled } }));
   await page.route("**/operations/**", route => route.fulfill({ json: route.request().url().endsWith("/summary") ? {
-    revision: 0, equipment: ["GT1", "GT2", "ST"].map(code => ({ code, name: code, status: "UNKNOWN", version: 0 })), counts: { total: 0, important: 0, VALVE: 0, ATTENTION: 0, TASK: 0 }, important: [], recent: [], activeShiftId: null, receipt: null
+    revision: 0, equipment: [], counts: { total: 0, important: 0, VALVE: 0, ATTENTION: 0, TASK: 0 }, important: [], recent: [], activeShiftId: null, receipt: null
   } : { items: [], total: 0, page: 1, pageSize: 20 } }));
   await page.route("**/login", route => route.fulfill({ json: { token: "ui-test-token", user: { id: 1, name: "Deniz", email: "test@example.com", role: "WORKER" } } }));
   await page.route("**/shifts/current", route => route.fulfill({ json: { currentShift: null } }));

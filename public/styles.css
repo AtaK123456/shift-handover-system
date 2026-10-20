@@ -104,7 +104,3 @@ td{font-size:13px}th{font-size:11px}.date-cell small{font-size:11px;color:#71806
 @media(max-height:500px){.ai-chat{bottom:calc(82px + env(safe-area-inset-bottom));max-height:calc(100dvh - 94px - env(safe-area-inset-bottom))}}
 
 .dashboard-message:empty{display:none}
-
-.equipment-tools{display:flex;flex-wrap:wrap;gap:9px;justify-content:flex-end}.equipment-name{font-size:13px;font-weight:650;overflow-wrap:anywhere;margin:0 0 9px}.catalog-rename{display:block;margin-top:12px}#catalog-dialog .hint{margin-top:10px}#catalog-code[readonly]{opacity:.75}
-@media(max-width:700px){.equipment-section>.section-title{flex-wrap:wrap}.equipment-tools{justify-content:flex-start}.equipment-tools .button{font-size:11px;padding:9px 12px}}
-.equipment-card .section-title{flex-wrap:wrap;align-items:flex-start}.equipment-card h3{max-width:100%;overflow-wrap:anywhere;min-width:0}.summary-units .unit-status{max-width:100%;overflow-wrap:anywhere}
