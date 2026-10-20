@@ -1,3 +1,4 @@
+import { navigate } from "./navigation.js";
 import { test, expect, type Page } from "@playwright/test";
 test.setTimeout(60_000);
 const unit = { code: "GT1", status: "UNKNOWN", note: "", version: 0, updatedAt: null, updatedBy: null };
@@ -23,7 +24,7 @@ test("older current-shift responses cannot overwrite newer state", async ({ page
     if (++requests === 1) { await gate; await r.fulfill({ json: { currentShift: null } }); }
     else await r.fulfill({ json: { currentShift: { id: 1, shiftDate: "2026-10-19", scheduledStart: "08:00", scheduledEnd: "16:00", startTime: "2026-10-19T05:00:00Z" } } });
   });
-  await login(page); await page.locator("#shift-button").click();
+  await login(page); await navigate(page, "handover"); await page.locator("#shift-button").click();
   await expect(page.locator("#shift-badge")).toHaveText("Vardiya aktif");
   release(); await expect(page.locator("#login-button")).toBeEnabled();
   await expect(page.locator("#shift-badge")).toHaveText("Vardiya aktif");
@@ -36,9 +37,9 @@ test("history returns to a valid page after records disappear from the last page
     const isHistory = params.get("view") === "history";
     return r.fulfill({ json: { items: isHistory ? shrink ? pageNo === 1 ? [entry(1)] : [] : pageNo === 1 ? Array.from({length:20},(_,i)=>entry(i+1)) : [entry(21)] : [], total: isHistory ? shrink ? 1 : 21 : 0, page: pageNo, pageSize: 20 } });
   });
-  await login(page); await page.locator("#operation-next").click();
+  await login(page); await navigate(page, "history"); await page.locator("#operation-next").click();
   await expect(page.locator("#operation-page")).toContainText("21–21");
-  shrink = true; await page.locator("#refresh-operations").click();
+  shrink = true; await navigate(page, "handover"); await page.locator("#refresh-operations").click(); await navigate(page, "history");
   await expect(page.locator("#operation-entries .entry-card")).toHaveCount(1);
   await expect(page.locator("#operation-page")).toContainText("1–1 / 1");
   await expect(page.locator("#operation-previous")).toBeDisabled();
@@ -51,7 +52,7 @@ test("failed page requests retain the displayed page and its rows", async ({ pag
     if (p.get("view") === "history" && p.get("page") === "2") return r.fulfill({ status: 503, json: { error: "Unavailable" } });
     return r.fulfill({ json: { items: Array.from({length:20},(_,i)=>entry(i+1)), total: 21, page: 1, pageSize: 20 } });
   });
-  await login(page); await page.locator("#operation-next").click();
+  await login(page); await navigate(page, "history"); await page.locator("#operation-next").click();
   await expect(page.locator("#dashboard-message")).not.toBeEmpty();
   await expect(page.locator("#operation-page")).toContainText("1–20 / 21");
   await expect(page.locator("#operation-previous")).toBeDisabled();
@@ -59,7 +60,7 @@ test("failed page requests retain the displayed page and its rows", async ({ pag
 
 test("failed closure retains the open dialog and operator note", async ({ page }) => {
   await setup(page); await page.route("**/operations/entries/1/close", r => r.fulfill({ status: 503, json: { error: "Temporary failure" } }));
-  await login(page); await page.locator("#board-entries button").click();
+  await login(page); await navigate(page, "handover"); await page.locator("#board-entries button").click();
   await page.locator("#close-note").fill("Important closure explanation"); await page.locator("#close-save").click();
   await expect(page.locator("#close-dialog")).toBeVisible();
   await expect(page.locator("#close-note")).toHaveValue("Important closure explanation");
@@ -68,7 +69,7 @@ test("failed closure retains the open dialog and operator note", async ({ page }
 
 test("failed equipment update retains status and note in its dialog", async ({ page }) => {
   await setup(page); await page.route("**/operations/equipment/GT1", r => r.fulfill({ status: 503, json: { error: "Temporary failure" } }));
-  await login(page); await page.locator("#equipment-grid button").click();
+  await login(page); await navigate(page, "handover"); await page.locator("#equipment-grid button").click();
   await page.locator("#equipment-status").selectOption("MAINTENANCE"); await page.locator("#equipment-note").fill("Awaiting inspection");
   await page.locator("#equipment-save").click();
   await expect(page.locator("#equipment-dialog")).toBeVisible();
@@ -94,7 +95,7 @@ test("ending an old shift resets the next shift date instead of carrying it forw
   await setup(page); let ended = false;
   await page.route("**/shifts/current", r => r.fulfill({ json: { currentShift: ended ? null : { id: 1, shiftDate: "2020-01-01", scheduledStart: "16:00", scheduledEnd: "00:00", startTime: "2020-01-01T13:00:00Z" } } }));
   await page.route("**/shifts/end", r => { ended=true; return r.fulfill({ json: {} }); });
-  await login(page); await expect(page.locator("#shift-date")).toHaveValue("2020-01-01");
+  await login(page); await navigate(page, "handover"); await expect(page.locator("#shift-date")).toHaveValue("2020-01-01");
   await page.locator("#shift-button").click(); await expect(page.locator("#shift-badge")).toHaveText("Vardiya kapalı");
   const today = await page.evaluate(()=>new Intl.DateTimeFormat("sv-SE",{timeZone:"Europe/Istanbul"}).format(new Date()));
   await expect(page.locator("#shift-date")).toHaveValue(today);

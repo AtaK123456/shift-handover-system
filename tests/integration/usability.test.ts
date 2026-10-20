@@ -25,7 +25,9 @@ test("versioned handover acknowledgement, concurrent updates and combined entry 
     const shift = await post("/shifts/start", {}).expect(201);
     const task = await post("/operations/entries", { kind: "TASK", priority: "HIGH", title: `Pump 100% ${suffix}`, description: "Kontrol edilecek", equipmentCode: "GT1" }).expect(201);
     const before = (await get("/operations/summary").expect(200)).body;
-    assert.ok(before.counts.TASK >= 1); assert.ok(before.important.some((item: any) => item.id === task.body.id));
+    assert.ok(before.counts.TASK >= 1);
+    assert.ok(before.tasks.some((item: any) => item.id === task.body.id && item.description === "Kontrol edilecek"));
+    assert.ok(before.tasks.length <= 5); assert.ok(before.valves.length <= 5); assert.ok(before.important.some((item: any) => item.id === task.body.id));
     await post("/operations/entries", { kind: "NOTE", title: `Pump other ${suffix}`, description: "Genel bilgi", equipmentCode: "GT2" }, 1).expect(201);
     await post("/operations/summary/read", { revision: before.revision }).expect(409);
     const latest = (await get("/operations/summary").expect(200)).body;
@@ -48,6 +50,8 @@ test("versioned handover acknowledgement, concurrent updates and combined entry 
     const literal = await get(`/operations/entries?view=all&q=${encodeURIComponent(`pump 100% ${suffix}`)}`).expect(200);
     assert.deepEqual(literal.body.items.map((item: any) => item.id), [task.body.id]);
     await post(`/operations/entries/${task.body.id}/close`, { closeNote: "Tamamlandı" }).expect(200);
+    const closedSummary = (await get("/operations/summary").expect(200)).body;
+    assert.equal(closedSummary.tasks.some((item: any) => item.id === task.body.id), false);
     const today = new Intl.DateTimeFormat("sv-SE", { timeZone: "Europe/Istanbul" }).format(new Date());
     const filters = new URLSearchParams({ view: "all", q: suffix, equipment: "GT1", kind: "TASK", status: "closed", from: today, to: today });
     const filtered = await get(`/operations/entries?${filters}`).expect(200);
@@ -57,6 +61,14 @@ test("versioned handover acknowledgement, concurrent updates and combined entry 
     await db.operationEntry.createMany({ data: Array.from({ length: 24 }, (_, i) => ({ authorId: users[0]!, kind: "NOTE" as const, title: `Page ${suffix} ${i}`, description: "Test page", equipmentCode: "ST" })) });
     const second = await get(`/operations/entries?view=all&q=${encodeURIComponent(`Page ${suffix}`)}&equipment=ST&page=2`).expect(200);
     assert.equal(second.body.total, 24); assert.equal(second.body.items.length, 4);
+    const valve = await post("/operations/entries", { kind: "VALVE", title: `Valve ${suffix}`, description: "Active valve note", equipmentCode: "ST" }).expect(201);
+    await db.operationEntry.createMany({ data: Array.from({ length: 6 }, (_, i) => ({ authorId: users[0]!, kind: "TASK" as const, title: `Preview ${suffix} ${i}`, description: "Ongoing task" })) });
+    const previews = (await get("/operations/summary").expect(200)).body;
+    assert.equal(previews.tasks.length, 5); assert.ok(previews.counts.TASK >= 6);
+    assert.ok(previews.valves.some((item: any) => item.id === valve.body.id && item.description === "Active valve note"));
+    assert.equal(previews.tasks.some((item: any) => item.id === task.body.id), false);
+    assert.ok(previews.tasks.every((item: any) => item.kind === "TASK"));
+    assert.ok(previews.valves.every((item: any) => item.kind === "VALVE"));
     await post("/shifts/end", {}).expect(200); await post("/shifts/start", {}).expect(201);
     assert.equal((await get("/operations/summary")).body.receipt, null);
   } finally {

@@ -1,3 +1,4 @@
+import { createWorkspace } from "./workspace.js";
 import { createAiAssistant } from "./ai-assistant.js";
 import { t, locale, lang, apiError, initializeLanguage } from "./i18n.js";
 const $ = id => document.getElementById(id);
@@ -13,6 +14,7 @@ const df = () => new Intl.DateTimeFormat(locale(), { timeZone: "Europe/Istanbul"
 const tf = () => new Intl.DateTimeFormat(locale(), { timeZone: "Europe/Istanbul", hour: "2-digit", minute: "2-digit" });
 const localDate = value => new Intl.DateTimeFormat("sv-SE", { timeZone: "Europe/Istanbul" }).format(new Date(value));
 const stamp = value => value ? `${df().format(new Date(value))} · ${tf().format(new Date(value))}` : "—";
+const workspace = createWorkspace({ authenticated: () => Boolean(token), stamp });
 function node(tag, text, className) { const el = document.createElement(tag); if (text !== undefined) el.textContent = text; if (className) el.className = className; return el; }
 function notify(message, error = false) { const el = token ? $("dashboard-message") : $("auth-message"); el.textContent = message; el.classList.toggle("error", error); }
 function showError(error) { if (error.name !== "AbortError") notify(error.message || t("failed"), true); }
@@ -23,7 +25,7 @@ function logout({ preserveDraft = false } = {}) {
     values: Object.fromEntries(["entry-kind", "entry-priority", "entry-unit", "entry-title", "entry-description"].map(id => [id, $(id).value])),
     files: selectedPhotos.map(item => item.file), chat: aiAssistant.snapshot() };
   if (!preserveDraft) interruptedDraft = null;
-  aiAssistant.reset();
+  aiAssistant.reset(); workspace.reset();
   summary = null; renderSummary(); operationFilters = new URLSearchParams();
   session.abort(); session = new AbortController(); token = null; user = null; current = undefined; listVersion++; currentVersion++; operationsVersion++;
   document.querySelectorAll("dialog[open]").forEach(dialog => dialog.close()); releasePhoto();
@@ -75,7 +77,7 @@ $("login-form").addEventListener("submit", async event => {
     const data = await response.json(); token = data.token; user = data.user; current = undefined; passwordVisibility(false); $("password").value = "";
     $("account-name").textContent = user.name; $("avatar").textContent = user.name.trim().split(/\s+/).slice(0, 2).map(n => n[0]).join("").toLocaleUpperCase(locale());
     $("scope-field").hidden = user.role !== "MANAGER"; $("auth-view").hidden = true; $("dashboard").hidden = false; $("dashboard-message").textContent = "";
-    applied = new URLSearchParams(); page = 1; renderIdentity(); renderCurrent();
+    applied = new URLSearchParams(); page = 1; workspace.start(); renderIdentity(); renderCurrent();
     if (interruptedDraft) {
       if (interruptedDraft.ownerId === user.id) {
         for (const [id, value] of Object.entries(interruptedDraft.values)) $(id).value = value;
@@ -94,6 +96,7 @@ function renderIdentity() {
   $("today").textContent = new Intl.DateTimeFormat(locale(), { timeZone: "Europe/Istanbul", weekday: "long", day: "numeric", month: "long", year: "numeric" }).format(new Date());
 }
 function renderCurrent() {
+  workspace.render({ current });
   const known = current !== undefined, active = Boolean(current);
   $("shift-badge").textContent = t(!known ? "loading" : active ? "active" : "inactive"); $("shift-badge").classList.toggle("active", active);
   $("shift-title").textContent = t(!known ? "checking" : active ? "shiftActiveTitle" : "shiftReady"); $("shift-description").textContent = t(!known ? "checkHint" : active ? "shiftActiveHint" : "shiftReadyHint");
@@ -117,10 +120,10 @@ async function loadCurrent() {
     const data = await (await api("/shifts/current")).json();
     if (identity !== token || version !== currentVersion) return;
     const previouslyActive = Boolean(current);
-    current = data.currentShift;
+    current = data.currentShift; workspace.render({ currentStale: false });
     if (previouslyActive && !current) { $("shift-schedule").reset(); $("shift-date").value = ""; }
     renderCurrent();
-  } catch (error) { if (identity === token && version === currentVersion) showError(error); }
+  } catch (error) { if (identity === token && version === currentVersion) { showError(error); workspace.render({ currentStale: true }); } }
 }
 $("shift-schedule").addEventListener("submit", event => event.preventDefault());
 $("shift-button").addEventListener("click", async () => {
@@ -212,11 +215,16 @@ async function loadOperations({ boardPage = board.page, historyPage = history.pa
       return loadOperations({ boardPage: validBoardPage, historyPage: validHistoryPage });
     }
     summary = overview; equipment = overview.equipment; board = open; history = entries;
-    renderSummary(); renderEquipment(); renderEntries();
-  } catch (error) { if (version === operationsVersion) { showError(error); renderEntries(); } }
+    renderSummary(); renderEquipment(); renderEntries(); workspace.render({ summary, checkedAt: new Date(), stale: false });
+  } catch (error) { if (version === operationsVersion) { showError(error); renderEntries(); workspace.render({ stale: true }); } }
   finally { if (version === operationsVersion) $("refresh-operations").disabled = false; }
 }
 $("refresh-operations").addEventListener("click", loadOperations);
+$("overview-refresh").addEventListener("click", async () => {
+  $("overview-refresh").disabled = true;
+  try { await Promise.all([loadOperations(), loadCurrent()]); }
+  finally { $("overview-refresh").disabled = false; }
+});
 for (const [prefix, isBoard] of [["board", true], ["operation", false]]) for (const direction of ["previous", "next"]) {
   $(`${prefix}-${direction}`).addEventListener("click", async () => {
     const state = isBoard ? board : history, target = Math.max(1, state.page + (direction === "next" ? 1 : -1));
@@ -312,4 +320,4 @@ $("operations-filter").addEventListener("submit", async event => {
   history.page = 1; await loadOperations();
 });
 $("operations-clear").addEventListener("click", async () => { $("operations-filter").reset(); operationFilters = new URLSearchParams(); history.page = 1; await loadOperations(); });
-initializeLanguage(); renderAuth(); renderPhotos();
+initializeLanguage(); workspace.start(); renderAuth(); renderPhotos();

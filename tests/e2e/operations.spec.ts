@@ -1,3 +1,4 @@
+import { navigate } from "./navigation.js";
 import { test, expect, type Page } from "@playwright/test";
 import { randomUUID } from "node:crypto";
 import sharp from "sharp";
@@ -24,6 +25,7 @@ async function login(page: Page, email: string) {
   await page.locator("#password").fill(password);
   await page.locator("#login-button").click();
   await expect(page.locator("#equipment-grid .equipment-card")).toHaveCount(3);
+  await navigate(page, "handover");
 }
 test("equipment, photographed work item, shift handover and English UI", async ({ page }) => {
   const errors: string[] = [];
@@ -37,13 +39,14 @@ test("equipment, photographed work item, shift handover and English UI", async (
   await expect(page.locator("#shift-date")).toHaveValue("2026-10-19");
   await expect(page.locator("#shift-slot")).toHaveValue("16:00-00:00");
   await expect(page.getByText("GEÇEN SÜRE", { exact: true })).toHaveCount(0);
-  const gt2 = page.locator(".equipment-card").filter({ has: page.getByRole("heading", { name: "GT2", exact: true }) });
+  const gt2 = page.locator("#equipment-grid .equipment-card").filter({ has: page.getByRole("heading", { name: "GT2", exact: true }) });
   await gt2.getByRole("button", { name: "Güncelle", exact: true }).click();
   await page.locator("#equipment-status").selectOption("INACTIVE");
   await page.locator("#equipment-note").fill("Planlı duruş");
   await page.locator("#equipment-save").click();
   await expect(gt2.getByText("Devre dışı", { exact: true })).toBeVisible();
   const title = `Kontrol edilecek iş ${suffix}`;
+  await navigate(page, "new-record");
   await page.locator("#entry-kind").selectOption("TASK");
   await page.locator("#entry-priority").selectOption("HIGH");
   await page.locator("#entry-title").fill(title);
@@ -52,6 +55,7 @@ test("equipment, photographed work item, shift handover and English UI", async (
   await page.locator("#entry-photos").setInputFiles({ name: "valve.png", mimeType: "image/png", buffer });
   await page.locator("#entry-save").click();
   const boardEntry = page.locator("#board-entries .entry-card").filter({ hasText: title });
+  await navigate(page, "handover");
   await expect(boardEntry).toHaveCount(1);
   await boardEntry.getByRole("button", { name: "Fotoğraf 1", exact: true }).click();
   await expect(page.locator("#photo-dialog")).toBeVisible();
@@ -65,7 +69,7 @@ test("equipment, photographed work item, shift handover and English UI", async (
   await expect(page.locator("html")).toHaveAttribute("lang", "en");
   await login(page, emails[1]!);
   await expect(page.getByRole("heading", { name: "Handover to the next shift", exact: true })).toBeVisible();
-  await expect(page.locator(".equipment-card").filter({ hasText: "GT2" }).getByText("Out of service", { exact: true })).toBeVisible();
+  await expect(page.locator("#equipment-grid .equipment-card").filter({ hasText: "GT2" }).getByText("Out of service", { exact: true })).toBeVisible();
   await expect(boardEntry).toHaveCount(1);
   await page.screenshot({ path: "../handover-desktop.png", fullPage: true });
   await page.setViewportSize({ width: 390, height: 844 });
@@ -75,6 +79,7 @@ test("equipment, photographed work item, shift handover and English UI", async (
   await page.locator("#close-note").fill("Kontrol tamamlandı.");
   await page.locator("#close-save").click();
   await expect(boardEntry).toHaveCount(0);
+  await navigate(page, "history");
   const closed = page.locator("#operation-entries .entry-card").filter({ hasText: title });
   await expect(closed.getByText("Closed", { exact: true })).toBeVisible();
   await expect(closed.getByText("Kontrol tamamlandı.", { exact: true })).toBeVisible();

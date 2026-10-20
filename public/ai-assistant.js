@@ -124,7 +124,7 @@ export function createAiAssistant({ api, isSaving }) {
     if ($("ai-use-unit").checked && result.equipment !== "UNKNOWN") $("entry-unit").value = result.equipment === "GENERAL" ? "" : result.equipment;
     if ($("ai-use-kind").checked) $("entry-kind").value = result.kind;
     if ($("ai-use-priority").checked && result.priority !== "UNKNOWN") $("entry-priority").value = result.priority;
-    invalidate("aiApplied"); $("draft-hint").hidden = false;
+    invalidate("aiApplied"); $("draft-hint").hidden = false; window.dispatchEvent(new Event("ai-entry-applied"));
   });
   $("ai-dismiss").addEventListener("click", () => { invalidate("aiDismissed"); $("ai-chat-input").focus(); });
   for (const id of ["entry-title", "entry-description"]) $(id).addEventListener("input", () => {
