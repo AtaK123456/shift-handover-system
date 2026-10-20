@@ -25,8 +25,9 @@ async function login(page: Page, index = 0) {
   await expect(page.locator("#summary-units .unit-status")).toHaveCount(3);
 }
 async function expire(page: Page) {
-  await page.route(/\/operations\/entries\?view=open/, route => route.fulfill({ status: 401, json: { error: "Expired" } }), { times: 1 });
   await navigate(page, "handover");
+  await expect(page.locator("#refresh-operations")).toBeEnabled();
+  await page.route(/\/operations\/entries\?view=open/, route => route.fulfill({ status: 401, json: { error: "Expired" } }), { times: 1 });
   await page.locator("#refresh-operations").click();
   await expect(page.locator("#auth-view")).toBeVisible();
 }
@@ -61,6 +62,8 @@ test("overview acknowledgement, quick photo entry, draft protection and combined
   const warning = await unload; expect(warning.type()).toBe("beforeunload"); await warning.dismiss(); await reload;
   await expect(page.locator("#entry-title")).toHaveValue(title);
   await page.locator("#entry-save").click();
+  await expect(page.locator("#entry-save")).toBeEnabled();
+  await navigate(page, "handover");
   await expect(page.locator("#board-entries .entry-card").filter({ hasText: title })).toHaveCount(1);
   await expect(page.locator("#photo-previews figure")).toHaveCount(0); await expect(page.locator("#draft-hint")).toBeHidden();
   await navigate(page, "handover");
@@ -73,9 +76,11 @@ test("overview acknowledgement, quick photo entry, draft protection and combined
   const result = page.locator("#operation-entries .entry-card").filter({ hasText: title }); await expect(result).toHaveCount(1);
   await result.getByRole("button", { name: "Kaydı kapat", exact: true }).click();
   await page.locator("#close-note").fill("Kontrol tamamlandı"); await page.locator("#close-save").click();
+  await expect(result).toHaveCount(0);
+  await navigate(page, "handover");
   await expect(page.locator("#summary-read")).toBeEnabled();
   await expect(page.locator("#summary-read-status")).toContainText("güncellendi");
-  await expect(result).toHaveCount(0);
+  await navigate(page, "history");
   await page.locator("#operations-status").selectOption("closed"); await page.locator('#operations-filter button[type="submit"]').click();
   await expect(result.getByText("Kontrol tamamlandı", { exact: true })).toBeVisible();
   await page.locator("#operations-clear").click();

@@ -43,7 +43,9 @@ test("login, start/end shift, filtered history and real Excel download", async (
   await navigate(page, "handover");
   await page.getByRole("button", { name: /Vardiyayı başlat/ }).click();
   await expect(page.getByRole("heading", { name: "Vardiyan devam ediyor." })).toBeVisible();
+  await navigate(page, "history");
   await expect(page.locator("#shift-rows tr")).toHaveCount(1);
+  await navigate(page, "handover");
   await page.getByRole("button", { name: /Vardiyayı bitir/ }).click();
   await expect(page.getByRole("heading", { name: "Yeni bir vardiyaya hazır mısın?" })).toBeVisible();
   await navigate(page, "history");

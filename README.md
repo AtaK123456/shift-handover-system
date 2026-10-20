@@ -239,14 +239,13 @@ Reloading still ends the in-memory session; logout clears drafts and observation
 snapshots. Language/theme controls and AI chat remain available across sections.
 Accepting AI suggestions opens New Entry without saving automatically.
 
-The overview refreshes every 30 seconds while the tab is visible and provides a
-manual Refresh button. Failed record or current-shift refreshes display an
-outdated-data warning while retaining the last successful snapshot. Each
-important/task/valve/recent preview is capped at five records; task and valve
-counts come from the same summary transaction, independent of board pagination.
-Complete equipment notes and work controls are available in Handover. The summary
-API additionally returns bounded `tasks` and `valves` previews, and existing
-previews include descriptions and timestamps. No database migration is required.
+Overview and Handover refresh every 30 seconds while visible and provide manual
+refresh controls. Failed record or current-shift refreshes retain the last
+successful snapshot with an outdated-data warning. Overview shows one preview of
+up to eight distinct open items, important first, plus five recent events/notes.
+Counts cover all open records, independent of pagination. Full equipment notes
+and work controls are available in Handover. The summary API retains its existing
+bounded per-kind previews and adds `openItems`. No database migration is required.
 
 ## Plant handover dashboard
 
@@ -268,7 +267,8 @@ previews include descriptions and timestamps. No database migration is required.
   without EXIF metadata. Photos are stored in PostgreSQL. Photo endpoints also
   require JWT authentication; files are not publicly served. The page uses
   temporary blob URLs after authenticated downloads.
-- The shared dashboard refreshes every 30 seconds, or immediately with **Refresh**.
+- Overview and Handover refresh every 30 seconds while visible, or immediately
+  with **Refresh**; history refreshes on entry, filtering and pagination.
 - When starting a shift, choose its date and **00:00–08:00 / 08:00–16:00 /
   16:00–00:00** schedule. The date is the day the scheduled interval starts;
   16:00–00:00 ends the next day. Actual start/end times are recorded separately.
@@ -503,4 +503,16 @@ handover snapshots are deleted by this restoration.
 
 ### Alerts and ongoing work overview
 
-The observation page now shows totals for all open items, important items, ongoing work and attention items. Ongoing work and attention appear before equipment details. A dedicated attention panel includes normal-priority items as well as important ones; important attention items intentionally appear in both this panel and the important-alert panel. Each panel previews up to five open entries, with important items first and a visible shown/total indicator when there are more. Cards show the unit, kind, priority, open status, description and opening date. Opening a card is read-only; closing work remains on the handover page. Counts describe overlapping categories and should not be added together. Refresh failures keep the existing stale-data warning. No database migration is required for this change.
+The observation page shows a compact shift and GT1/GT2/ST snapshot, followed by counts and one open-work list. Each entry appears once, with important entries first and type/unit/priority badges. The list previews eight open entries across tasks, valves and attention items; a shown/total indicator and a link to the full handover board make the preview limit explicit. Normal attention items remain eligible for the preview. Counts describe overlapping categories and must not be added together. Recent events and notes remain separate. Details are read-only; closing records stays on the handover page.
+
+The handover board supports server-side kind, unit and important-only filters. Applied filters persist across pagination and page navigation; a failed filter request retains the previous results and restores the previously applied controls.
+
+Both themes use neutral surfaces, readable secondary text, green actions, amber attention and neutral inactive-unit labels. Status labels accompany colors. Browser checks measure visible text contrast on all four pages in light/dark themes against WCAG AA thresholds; they do not constitute a full accessibility audit.
+
+### Page loading and refresh behavior
+
+- Overview requests current shift and summary only. Compared with the previous implementation, overview startup uses two operational reads instead of five (AI availability is an additional unchanged read).
+- Handover adds the open-board page; history loads shift history and its own entry page. New Entry does not poll operational data. Entering a page refreshes its data, while unsaved form text and photos remain intact.
+- Live overview/handover refresh runs every 30 seconds only while the tab is visible. Returning to a visible live page triggers a refresh, with overlapping automatic refreshes suppressed.
+- Unchanged overview data preserves card DOM nodes and keyboard focus; unchanged board data skips rebuilding entry cards. Freshness/error status is updated separately. Date/time formatters are reused per language. Photos continue to load only when requested.
+- Server authorization, versioned acknowledgement, closure history and retained compatibility migration are unchanged. No new migration or dependencies are required. No production latency or large-dataset benchmark is claimed.
