@@ -104,3 +104,7 @@ td{font-size:13px}th{font-size:11px}.date-cell small{font-size:11px;color:#71806
 @media(max-height:500px){.ai-chat{bottom:calc(82px + env(safe-area-inset-bottom));max-height:calc(100dvh - 94px - env(safe-area-inset-bottom))}}
 
 .dashboard-message:empty{display:none}
+
+.overview-counts{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin:0 0 20px}.overview-count{display:flex;flex-direction:column;gap:6px;padding:18px;border:1px solid var(--line);border-radius:12px;background:var(--surface,#fff);color:inherit;text-decoration:none;overflow-wrap:anywhere}.overview-count strong{font-size:27px;line-height:1.2}.overview-count span{font-size:12px}.overview-count:hover{border-color:#7e9774}.overview-count:focus-visible,.observation-card:focus-visible{outline:3px solid #6e9b79;outline-offset:3px}.overview-all{display:inline-block;margin-top:18px}.overview-columns .panel-intro{margin:0 0 14px}.observation-card{cursor:pointer}.observation-card .entry-meta{line-height:1.6}
+:root[data-theme=dark] .overview-count{background:#1b2b23}
+@media(max-width:700px){.overview-counts{grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}.overview-count{padding:14px}.overview-count strong{font-size:24px}}

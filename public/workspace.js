@@ -36,20 +36,27 @@ export function createWorkspace({ authenticated, stamp }) {
     $("overview-shift-hours").textContent = current ? `${current.shiftDate} · ${current.scheduledStart}–${current.scheduledEnd}` : t(current === undefined ? "checkHint" : "overviewNoShift");
     $("overview-updated").textContent = stale || currentStale ? t("overviewStale") : checkedAt ? t("overviewUpdated", { date: stamp(checkedAt) }) : t("summaryLoading");
     $("overview-updated").classList.toggle("error", stale || currentStale);
+    $("overview-counts").replaceChildren(...[["summaryOpen", "total", "board-title"], ["summaryImportant", "important", "overview-important"], ["overviewTasks", "TASK", "overview-tasks"], ["overviewAttention", "ATTENTION", "overview-attention"]].map(([label, key, target]) => {
+      const link = make("a", undefined, "overview-count"); link.href = target === "board-title" ? "#board-title" : `#${target}`;
+      link.append(make("strong", summary ? String(summary.counts[key]) : "—"), make("span", t(label)));
+      if (target !== "board-title") link.addEventListener("click", event => { event.preventDefault(); $(target).scrollIntoView({ behavior: "instant", block: "center" }); $(target).focus({ preventScroll: true }); });
+      return link;
+    }));
+    for (const [key, kind] of [["tasks", "TASK"], ["attention", "ATTENTION"]]) $(`overview-${key}-count`).textContent = summary ? String(summary.counts[kind]) : "—";
     $("overview-equipment").replaceChildren(...(summary?.equipment || []).map(item => {
       const card = make("article", undefined, "equipment-card"); const head = make("div", undefined, "section-title");
       head.append(make("h3", item.code), make("span", t(item.status), `unit-status unit-${item.status.toLowerCase()}`));
       card.append(head, make("p", item.note || "—", "equipment-note"), make("p", item.updatedAt ? stamp(item.updatedAt) : t("neverUpdated"), "hint"));
       return card;
     }));
-    for (const [key, items, count] of [["important", summary?.important, summary?.counts.important], ["tasks", summary?.tasks, summary?.counts.TASK], ["valves", summary?.valves, summary?.counts.VALVE], ["recent", summary?.recent, summary?.recent.length]]) {
-      const list = $(`overview-${key}`);
+    for (const [key, items, count] of [["important", summary?.important, summary?.counts.important], ["attention", summary?.attention, summary?.counts.ATTENTION], ["tasks", summary?.tasks, summary?.counts.TASK], ["valves", summary?.valves, summary?.counts.VALVE], ["recent", summary?.recent, summary?.recent.length]]) {
+      const list = $(`overview-${key}`); list.tabIndex = -1;
       if (!summary) { list.replaceChildren(make("p", t("summaryLoading"), "hint")); continue; }
       const children = (items || []).map(item => {
         const button = make("button", undefined, `observation-card${item.priority === "HIGH" ? " important" : ""}`); button.type = "button";
-        const meta = make("span", `${item.equipmentCode || t("general")} · ${t(item.kind)}${item.priority === "HIGH" ? ` · ${t("HIGH")}` : ""}`, "entry-meta");
+        const meta = make("span", `${item.equipmentCode || t("general")} · ${t(item.kind)}${key === "recent" ? "" : ` · ${t(item.priority)} · ${t("open")}`}`, "entry-meta");
         button.append(meta, make("strong", item.title), make("span", item.description || t("viewDetails"), "observation-excerpt"));
-        if (item.createdAt) button.append(make("span", stamp(item.createdAt), "hint"));
+        if (item.createdAt) button.append(make("span", t(key === "recent" ? "recentOn" : "openedOn", { date: stamp(item.createdAt) }), "hint"));
         button.addEventListener("click", () => details(item)); return button;
       });
       if (!children.length) children.push(make("p", t(count ? "detailsInHandover" : key === "important" ? "noImportant" : key === "recent" ? "noEntries" : "noOpen"), "overview-empty"));

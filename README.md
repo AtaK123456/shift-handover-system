@@ -500,3 +500,7 @@ codes remain readable in the shared board/history and closable through the
 normal workflow; creating new entries for those codes or updating their equipment
 status is disabled. No existing equipment, status notes, photos, entries or
 handover snapshots are deleted by this restoration.
+
+### Alerts and ongoing work overview
+
+The observation page now shows totals for all open items, important items, ongoing work and attention items. Ongoing work and attention appear before equipment details. A dedicated attention panel includes normal-priority items as well as important ones; important attention items intentionally appear in both this panel and the important-alert panel. Each panel previews up to five open entries, with important items first and a visible shown/total indicator when there are more. Cards show the unit, kind, priority, open status, description and opening date. Opening a card is read-only; closing work remains on the handover page. Counts describe overlapping categories and should not be added together. Refresh failures keep the existing stale-data warning. No database migration is required for this change.

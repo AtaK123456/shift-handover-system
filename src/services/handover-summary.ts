@@ -11,7 +11,8 @@ export async function handoverSummary(tx: Prisma.TransactionClient, userId: numb
   const recent = await tx.operationEntry.findMany({ where: { kind: { in: ["EVENT", "NOTE"] } }, take: 5, orderBy: [{ createdAt: "desc" }, { id: "desc" }], select: preview });
   const tasks = await tx.operationEntry.findMany({ where: { closedAt: null, kind: "TASK" }, take: 5, orderBy: [{ priority: "desc" }, { createdAt: "desc" }, { id: "desc" }], select: preview });
   const valves = await tx.operationEntry.findMany({ where: { closedAt: null, kind: "VALVE" }, take: 5, orderBy: [{ priority: "desc" }, { createdAt: "desc" }, { id: "desc" }], select: preview });
+  const attention = await tx.operationEntry.findMany({ where: { closedAt: null, kind: "ATTENTION" }, take: 5, orderBy: [{ priority: "desc" }, { createdAt: "desc" }, { id: "desc" }], select: preview });
   const shift = await tx.shift.findFirst({ where: { userId, status: "ACTIVE" }, select: { id: true } });
   const receipt = shift ? await tx.handoverRead.findFirst({ where: { userId, shiftId: shift.id }, orderBy: [{ revision: "desc" }, { id: "desc" }], select: { id: true, revision: true, readAt: true } }) : null;
-  return { revision: revision.version, equipment, counts, important, recent, tasks, valves, activeShiftId: shift?.id ?? null, receipt };
+  return { revision: revision.version, equipment, counts, important, recent, tasks, valves, attention, activeShiftId: shift?.id ?? null, receipt };
 }

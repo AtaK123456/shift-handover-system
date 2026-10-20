@@ -1,4 +1,11 @@
 const messages = {
+  openRecords:["Açık kayıtlar", "Open records"],
+  overviewAttention:["Dikkat Edilecek Konular", "Items to Watch"],
+  openWorkHint:["Tamamlanıp kapatılana kadar sonraki vardiyalara aktarılır. Önemli işler önce gösterilir.", "Carried into the next shift until closed. Important work appears first."],
+  attentionHint:["Normal ve önemli tüm açık dikkat konuları. Önemli olanlar uyarı panelinde de gösterilir.", "All open attention items, both normal and important. Important items also appear in alerts."],
+  openedOn:["Açılış: {date}", "Opened: {date}"],
+  recentOn:["Kayıt: {date}", "Recorded: {date}"],
+
   aiOpen:["AI sohbetini aç veya kapat", "Toggle AI chat"],
   aiClose:["AI sohbetini kapat", "Close AI chat"],
   aiChatLabel:["KAYIT VE DEVİR DESTEĞİ", "ENTRY & HANDOVER SUPPORT"],

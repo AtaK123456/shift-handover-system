@@ -4,7 +4,7 @@ test.setTimeout(60_000);
 const record = (id: number, kind: string, title: string) => ({ id, kind, title, description: "Kontrol sonucu bekleniyor. Sonraki vardiya takip etmeli.", priority: "HIGH", equipmentCode: "GT1", createdAt: "2026-10-20T06:00:00Z" });
 const task = record(1, "TASK", "GT1 titreşim kontrolü"), valve = record(2, "VALVE", "V-102 aktif vana");
 const equipment = ["GT1", "GT2", "ST"].map((code, i) => ({ code, status: i ? "INACTIVE" : "ACTIVE", note: i ? "Planlı duruş" : "Bakım kontrolü bekleniyor", updatedAt: "2026-10-20T06:00:00Z", updatedBy: { name: "Operatör" }, version: 1 }));
-const summary = { revision: 1, equipment, counts: { total: 8, important: 1, VALVE: 1, ATTENTION: 0, TASK: 7 }, important: [task], tasks: [task], valves: [valve], recent: [record(3, "NOTE", "Vardiya gözlemi")], activeShiftId: null, receipt: null };
+const summary = { revision: 1, equipment, counts: { total: 8, important: 1, VALVE: 1, ATTENTION: 1, TASK: 6 }, attention: [{ ...record(4, "ATTENTION", "ST yağ seviyesi takip edilecek"), priority: "NORMAL" }], important: [task], tasks: [task], valves: [valve], recent: [record(3, "NOTE", "Vardiya gözlemi")], activeShiftId: null, receipt: null };
 async function login(page: Page, role = "WORKER") {
   await page.route("**/login", r => r.fulfill({ json: { token: "workspace-test", user: { id: 1, name: "Deniz Yılmaz", role } } }));
   await page.route("**/ai/status", r => r.fulfill({ json: { enabled: false } }));
@@ -24,7 +24,7 @@ test("landing page observes current work; actions stay on dedicated pages and re
   await expect(page.locator('[data-nav="overview"]')).toHaveAttribute("aria-current", "page");
   await expect(page.locator("#entry-form")).toBeHidden(); await expect(page.locator("#shift-button")).toBeHidden(); await expect(page.locator("#summary-read")).toBeHidden();
   await expect(page.locator("#overview-equipment .equipment-card")).toHaveCount(3);
-  await expect(page.locator("#overview-tasks")).toContainText("1 / 7");
+  await expect(page.locator("#overview-tasks")).toContainText("1 / 6");
   await expect(page.locator("#overview-valves")).toContainText(valve.title);
   await expect(page.locator("#overview-updated")).toContainText("Son veri kontrolü");
   await page.locator("#overview-important .observation-card").click();
@@ -106,4 +106,28 @@ test("plant workflow retains four pages and fixed turbine choices without catalo
   await page.locator("#entry-unit").selectOption("GT2"); await page.locator("#entry-title").fill("GT2 vardiya notu");
   await navigate(page, "overview"); await navigate(page, "new-record");
   await expect(page.locator("#entry-unit")).toHaveValue("GT2"); await expect(page.locator("#entry-title")).toHaveValue("GT2 vardiya notu");
+});
+
+
+test("overview exposes normal attention items, accurate totals and read-only work details", async ({ page }) => {
+  await login(page);
+  await expect(page.locator("#overview-attention")).toContainText("ST yağ seviyesi takip edilecek");
+  await expect(page.locator("#overview-important")).not.toContainText("ST yağ seviyesi takip edilecek");
+  await expect(page.locator("#overview-tasks-count")).toHaveText("6");
+  await expect(page.locator("#overview-attention-count")).toHaveText("1");
+  await expect(page.locator("#overview-counts strong")).toHaveText(["8", "1", "6", "1"]);
+  await expect(page.locator("#overview-tasks")).toContainText("Açılış:");
+  await page.locator('#overview-counts a[href="#overview-attention"]').click();
+  await expect(page.locator("#page-overview")).toBeVisible();
+  await expect(page.locator("#overview-attention")).toBeFocused();
+  await page.locator("#overview-attention button").click();
+  await expect(page.locator("#overview-detail-description")).toHaveText(task.description);
+  await page.keyboard.press("Escape");
+  await page.locator("#dashboard [data-language]").selectOption("en");
+  await expect(page.locator('[data-i18n="overviewAttention"]')).toHaveText("Items to Watch");
+  await expect(page.locator("#overview-tasks")).toContainText("Opened:");
+  await page.route("**/operations/summary", r => r.fulfill({ json: { ...summary, counts: { total: 0, important: 0, TASK: 0, ATTENTION: 0, VALVE: 0 }, tasks: [], important: [], attention: [], valves: [] } }));
+  await page.locator("#overview-refresh").click();
+  await expect(page.locator("#overview-counts strong")).toHaveText(["0", "0", "0", "0"]);
+  await expect(page.locator("#overview-attention button")).toHaveCount(0);
 });
