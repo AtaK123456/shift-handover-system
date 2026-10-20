@@ -178,7 +178,7 @@ $("export-button").addEventListener("click", async () => {
 });
 function renderEquipment() {
   $("equipment-grid").replaceChildren(...equipment.map(item => {
-    const card = node("article", undefined, "equipment-card"); const heading = node("div", undefined, "section-title"); heading.append(node("h3", item.code), node("span", t(item.status), `unit-status unit-${item.status.toLowerCase()}`));
+    const card = node("article", undefined, "equipment-card"); card.dataset.status = item.status; const heading = node("div", undefined, "section-title"); heading.append(node("h3", item.code), node("span", t(item.status), `unit-status unit-${item.status.toLowerCase()}`));
     card.append(heading, node("p", item.note || "—", "equipment-note"), node("p", item.updatedAt ? `${item.updatedBy?.name || "—"} · ${stamp(item.updatedAt)}` : t("neverUpdated"), "hint"));
     const button = node("button", t("update"), "button secondary small"); button.type = "button";
     button.addEventListener("click", () => { selectedEquipment = { ...item }; $("equipment-dialog-title").textContent = `${item.code} · ${t("update")}`; $("equipment-status").value = item.status; $("equipment-note").value = item.note; $("equipment-message").textContent = ""; $("equipment-dialog").showModal(); });
@@ -190,7 +190,7 @@ async function viewPhoto(id) {
 }
 function entryCard(item) {
   const card = node("article", undefined, `entry-card${item.priority === "HIGH" ? " important" : ""}`);
-  const meta = node("div", undefined, "entry-meta"); meta.append(node("span", t(item.kind), "entry-kind"), node("span", item.equipmentCode || t("general"), "status")); if (item.priority === "HIGH") meta.append(node("span", t("HIGH"), "priority-high")); if (item.closedAt) meta.append(node("span", t("closed"), "status"));
+  const meta = node("div", undefined, "entry-meta"); meta.append(node("span", t(item.kind), `entry-kind kind-${item.kind}`), node("span", item.equipmentCode || t("general"), "status")); if (item.priority === "HIGH") meta.append(node("span", t("HIGH"), "priority-high")); if (item.closedAt) meta.append(node("span", t("closed"), "status"));
   card.append(meta, node("h3", item.title), node("p", item.description, "entry-description"), node("p", `${item.author.name} · ${stamp(item.createdAt)}${item.shiftId ? ` · #${item.shiftId}` : ""}`, "hint"));
   const actions = node("div", undefined, "entry-actions");
   item.photos.forEach((photo, index) => { const button = node("button", t("viewPhoto", { number: index + 1 }), "button quiet small"); button.type = "button"; button.addEventListener("click", () => viewPhoto(photo.id)); actions.append(button); });

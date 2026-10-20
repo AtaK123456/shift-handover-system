@@ -165,8 +165,25 @@ td{font-size:13px}th{font-size:11px}.date-cell small{font-size:11px;color:#71806
 :root[data-theme] .shift-schedule label,:root[data-theme] .shift-main .overnight-note{color:#dbeafe}
 :root[data-theme] .summary-stat{background:var(--soft)}
 :root[data-theme] .summary-stat span{color:var(--muted)}
-:root[data-theme] .date-dot{background:var(--accent-color)}
+:root[data-theme] .date-dot{background:var(--positive)}
 :root[data-theme] .theme-toggle[role=switch]:hover{background:var(--soft)}
 :root[data-theme] input{accent-color:var(--accent-color)}
 :root[data-theme] .empty-icon{background:var(--accent-soft);color:var(--accent-ink)}
 :root[data-theme] .password-toggle:hover{background:var(--soft)}
+
+/* Small accents reinforce text labels without tinting entire cards. */
+:root{--work-bg:#ede9fe;--work-ink:#5b21b6;--valve-bg:#cffafe;--valve-ink:#155e75}
+:root[data-theme=dark]{--work-bg:#332459;--work-ink:#ddd6fe;--valve-bg:#123a43;--valve-ink:#a5f3fc}
+:root[data-theme] .entry-meta .entry-kind{display:inline-flex;align-items:center;gap:6px;padding:3px 7px;border-radius:5px;background:var(--neutral-bg);color:var(--neutral)}
+:root[data-theme] .entry-kind.kind-TASK{background:var(--work-bg);color:var(--work-ink)}
+:root[data-theme] .entry-kind.kind-VALVE{background:var(--valve-bg);color:var(--valve-ink)}
+:root[data-theme] .entry-kind.kind-ATTENTION{background:var(--warning-bg);color:var(--warning)}
+:root[data-theme] .entry-kind.kind-EVENT{background:var(--accent-soft);color:var(--accent-ink)}
+.entry-kind::before{content:"";width:5px;height:5px;border-radius:50%;background:currentColor;flex-shrink:0}
+.equipment-card h3{display:flex;align-items:center;gap:7px}
+.equipment-card h3::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--muted);flex-shrink:0}
+.equipment-card[data-status=ACTIVE] h3::before{background:var(--positive)}
+.equipment-card[data-status=MAINTENANCE] h3::before{background:var(--warning)}
+.overview-count::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--accent-color);flex-shrink:0}
+.overview-count[data-category=important]::before,.overview-count[data-category=ATTENTION]::before{background:var(--warning)}
+.overview-count[data-category=TASK]::before{background:var(--work-ink)}
