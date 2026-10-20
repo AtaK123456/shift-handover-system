@@ -117,6 +117,7 @@ enum EntryPriority {
 
 model Equipment {
   code String @id
+  name String @default("")
   status EquipmentStatus @default(UNKNOWN)
   note String @default("")
   version Int @default(0)

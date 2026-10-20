@@ -31,7 +31,7 @@ export function createOperationsRouter(prisma: PrismaClient) {
   const writeLimit = rateLimit({ windowMs: 15 * 60 * 1000, limit: 60, standardHeaders: "draft-8", legacyHeaders: false,
     message: { error: "Çok fazla deneme. Lütfen daha sonra tekrar deneyin." } });
   router.get("/equipment", async (_req, res) => {
-    res.json({ items: await prisma.equipment.findMany({ orderBy: { code: "asc" }, include: { updatedBy: user } }) });
+    res.json({ items: await prisma.equipment.findMany({ where: { code: { in: ["GT1", "GT2", "ST"] } }, orderBy: { code: "asc" }, include: { updatedBy: user } }) });
   });
   router.put("/equipment/:code", writeLimit, async (req, res) => {
     const { status, version } = req.body ?? {};

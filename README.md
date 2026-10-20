@@ -477,3 +477,26 @@ No database migration is needed for this release.
 
 See the [2026-10-19 application bug review](docs/reviews/2026-10-19-bug-review.md)
 for reproduced defects, fixes, verification, and remaining deployment checks.
+
+
+## Plant workflow restoration
+
+The configurable equipment/work-area catalog has been withdrawn. The application
+again uses GT1, GT2 and ST, with the original turbine-specific labels, selectors,
+AI validation and status operations. The four-section observation workspace,
+photos, handover acknowledgment, history and Excel export remain available.
+Catalog creation and rename endpoints and their UI controls have been removed.
+
+The previously published `20261020000100_equipment_catalog_names` migration and
+`Equipment.name` field remain for database compatibility. The application does
+not use display names. Keeping the original migration preserves installations
+that already applied it; no reverse migration, column deletion, data reset or
+migration-history edit is needed. Deploying on an earlier installation can still
+apply this additive migration using `npx prisma migrate deploy`.
+
+Any extra equipment definitions created while testing the catalog remain in the
+database. Unit status panels show GT1/GT2/ST only. Existing entries linked to other
+codes remain readable in the shared board/history and closable through the
+normal workflow; creating new entries for those codes or updating their equipment
+status is disabled. No existing equipment, status notes, photos, entries or
+handover snapshots are deleted by this restoration.

@@ -5,8 +5,8 @@ const record = (id: number, kind: string, title: string) => ({ id, kind, title, 
 const task = record(1, "TASK", "GT1 titreşim kontrolü"), valve = record(2, "VALVE", "V-102 aktif vana");
 const equipment = ["GT1", "GT2", "ST"].map((code, i) => ({ code, status: i ? "INACTIVE" : "ACTIVE", note: i ? "Planlı duruş" : "Bakım kontrolü bekleniyor", updatedAt: "2026-10-20T06:00:00Z", updatedBy: { name: "Operatör" }, version: 1 }));
 const summary = { revision: 1, equipment, counts: { total: 8, important: 1, VALVE: 1, ATTENTION: 0, TASK: 7 }, important: [task], tasks: [task], valves: [valve], recent: [record(3, "NOTE", "Vardiya gözlemi")], activeShiftId: null, receipt: null };
-async function login(page: Page) {
-  await page.route("**/login", r => r.fulfill({ json: { token: "workspace-test", user: { id: 1, name: "Deniz Yılmaz", role: "WORKER" } } }));
+async function login(page: Page, role = "WORKER") {
+  await page.route("**/login", r => r.fulfill({ json: { token: "workspace-test", user: { id: 1, name: "Deniz Yılmaz", role } } }));
   await page.route("**/ai/status", r => r.fulfill({ json: { enabled: false } }));
   await page.route("**/shifts/current", r => r.fulfill({ json: { currentShift: null } }));
   await page.route(/\/shifts\?/, r => r.fulfill({ json: { items: [], total: 0, page: 1, pageSize: 20 } }));
@@ -91,4 +91,19 @@ test("unknown shift status is not presented as an inactive shift; recent notes l
   await expect(page.locator("#overview-updated")).toContainText("güncel olmayabilir");
   await expect(page.locator("#overview-shift-status")).not.toHaveText("Vardiya kapalı");
   await expect(page.locator("#overview-shift-hours")).not.toContainText("Aktif vardiyan bulunmuyor");
+});
+
+
+test("plant workflow retains four pages and fixed turbine choices without catalog administration", async ({ page }) => {
+  await login(page, "MANAGER");
+  await expect(page.locator("[data-nav]")).toHaveCount(4);
+  await navigate(page, "handover");
+  await expect(page.locator("#catalog-add")).toHaveCount(0); await expect(page.locator(".catalog-rename")).toHaveCount(0);
+  await expect(page.locator("#equipment-grid .equipment-card")).toHaveCount(3);
+  await expect(page.locator("[data-i18n=equipmentHint]")).toContainText("gaz türbini");
+  await navigate(page, "new-record");
+  expect(await page.locator("#entry-unit option").evaluateAll(options => options.map(option => (option as HTMLOptionElement).value))).toEqual(["", "GT1", "GT2", "ST"]);
+  await page.locator("#entry-unit").selectOption("GT2"); await page.locator("#entry-title").fill("GT2 vardiya notu");
+  await navigate(page, "overview"); await navigate(page, "new-record");
+  await expect(page.locator("#entry-unit")).toHaveValue("GT2"); await expect(page.locator("#entry-title")).toHaveValue("GT2 vardiya notu");
 });

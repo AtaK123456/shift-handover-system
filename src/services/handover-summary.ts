@@ -3,7 +3,7 @@ const preview = { id: true, title: true, description: true, kind: true, priority
 const boardKinds = ["VALVE", "ATTENTION", "TASK"] as const;
 export async function handoverSummary(tx: Prisma.TransactionClient, userId: number) {
   const revision = await tx.operationRevision.findUniqueOrThrow({ where: { id: 1 } });
-  const equipment = await tx.equipment.findMany({ orderBy: { code: "asc" }, include: { updatedBy: { select: { id: true, name: true } } } });
+  const equipment = await tx.equipment.findMany({ where: { code: { in: ["GT1", "GT2", "ST"] } }, orderBy: { code: "asc" }, include: { updatedBy: { select: { id: true, name: true } } } });
   const groups = await tx.operationEntry.groupBy({ by: ["kind", "priority"], where: { closedAt: null, kind: { in: [...boardKinds] } }, _count: true });
   const counts = { total: 0, important: 0, VALVE: 0, ATTENTION: 0, TASK: 0 };
   for (const group of groups) { counts.total += group._count; if (group.priority === "HIGH") counts.important += group._count; counts[group.kind as typeof boardKinds[number]] += group._count; }
