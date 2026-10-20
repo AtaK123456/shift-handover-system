@@ -507,7 +507,7 @@ The observation page shows a compact shift and GT1/GT2/ST snapshot, followed by 
 
 The handover board supports server-side kind, unit and important-only filters. Applied filters persist across pagination and page navigation; a failed filter request retains the previous results and restores the previously applied controls.
 
-Both themes use neutral surfaces, readable secondary text, green actions, amber attention and neutral inactive-unit labels. Status labels accompany colors. Browser checks measure visible text contrast on all four pages in light/dark themes against WCAG AA thresholds; they do not constitute a full accessibility audit.
+Both themes use neutral surfaces, readable secondary text, blue actions and selection, amber attention and neutral inactive-unit labels. Status labels accompany colors. Browser checks measure visible text contrast on all four pages in light/dark themes against WCAG AA thresholds; they do not constitute a full accessibility audit.
 
 ### Page loading and refresh behavior
 
