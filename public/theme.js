@@ -9,7 +9,7 @@
     const theme = preference || (system.matches ? "dark" : "light");
     const dark = theme === "dark";
     document.documentElement.dataset.theme = theme;
-    document.querySelector('meta[name="theme-color"]')?.setAttribute("content", dark ? "#111c19" : "#f6f7f4");
+    document.querySelector('meta[name="theme-color"]')?.setAttribute("content", dark ? "#111827" : "#f4f6f8");
     document.querySelectorAll("[data-theme-toggle]").forEach(button => {
       const translate = window.appI18n?.t;
       button.setAttribute("aria-label", translate ? translate("darkTheme") : "Koyu tema");

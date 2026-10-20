@@ -1,10 +1,10 @@
 import type { Request } from "express";
-import { EntryKind, type Prisma } from "../generated/prisma/client.js";
+import { EntryKind, EntryPriority, type Prisma } from "../generated/prisma/client.js";
 import { parseShiftDate, RequestError } from "./shift-query.js";
 export function operationQuery(query: Request["query"]) {
   const invalid = () => new RequestError("Geçersiz filtre parametresi.", 400);
-  if (Object.keys(query).some(key => !["view", "page", "q", "kind", "equipment", "status", "from", "to"].includes(key))) throw invalid();
-  const { view = "open", page = "1", q, kind, equipment, status, from, to } = query;
+  if (Object.keys(query).some(key => !["view", "page", "q", "kind", "equipment", "priority", "status", "from", "to"].includes(key))) throw invalid();
+  const { view = "open", page = "1", q, kind, equipment, priority, status, from, to } = query;
   if (typeof view !== "string" || !["open", "history", "all"].includes(view) || typeof page !== "string" || !/^[1-9]\d{0,3}$/.test(page)) throw invalid();
   const conditions: Prisma.OperationEntryWhereInput[] = [];
   if (view === "open") conditions.push({ closedAt: null, kind: { in: [EntryKind.VALVE, EntryKind.ATTENTION, EntryKind.TASK] } });
@@ -18,6 +18,7 @@ export function operationQuery(query: Request["query"]) {
   }
   if (kind !== undefined) { if (typeof kind !== "string" || !Object.values(EntryKind).includes(kind as EntryKind)) throw invalid(); conditions.push({ kind: kind as EntryKind }); }
   if (equipment !== undefined) { if (typeof equipment !== "string" || !["GT1", "GT2", "ST", "GENERAL"].includes(equipment)) throw invalid(); conditions.push({ equipmentCode: equipment === "GENERAL" ? null : equipment }); }
+  if (priority !== undefined) { if (typeof priority !== "string" || !Object.values(EntryPriority).includes(priority as EntryPriority)) throw invalid(); conditions.push({ priority: priority as EntryPriority }); }
   if (status !== undefined) { if (status !== "open" && status !== "closed") throw invalid(); conditions.push(status === "open" ? { closedAt: null, kind: { in: [EntryKind.VALVE, EntryKind.ATTENTION, EntryKind.TASK] } } : { closedAt: { not: null } }); }
   const start = from === undefined ? undefined : parseShiftDate(from), end = to === undefined ? undefined : parseShiftDate(to);
   if (start === null || end === null || (start && end && start > end)) throw invalid();

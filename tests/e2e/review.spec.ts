@@ -24,7 +24,7 @@ test("older current-shift responses cannot overwrite newer state", async ({ page
     if (++requests === 1) { await gate; await r.fulfill({ json: { currentShift: null } }); }
     else await r.fulfill({ json: { currentShift: { id: 1, shiftDate: "2026-10-19", scheduledStart: "08:00", scheduledEnd: "16:00", startTime: "2026-10-19T05:00:00Z" } } });
   });
-  await login(page); await navigate(page, "handover"); await page.locator("#shift-button").click();
+  await login(page); await navigate(page, "handover");
   await expect(page.locator("#shift-badge")).toHaveText("Vardiya aktif");
   release(); await expect(page.locator("#login-button")).toBeEnabled();
   await expect(page.locator("#shift-badge")).toHaveText("Vardiya aktif");

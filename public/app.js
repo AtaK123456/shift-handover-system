@@ -8,12 +8,20 @@ let session = new AbortController(), equipment = [], selectedEquipment = null, c
 let board = { items: [], page: 1, total: 0 }, history = { items: [], page: 1, total: 0 }, shiftRows = [];
 let operationsVersion = 0, summary = null, summaryBusy = false;
 let selectedPhotos = [], interruptedDraft = null, entrySending = false;
-let operationFilters = new URLSearchParams();
+let operationFilters = new URLSearchParams(), boardFilters = new URLSearchParams();
 const aiAssistant = createAiAssistant({ api, isSaving: () => entrySending });
-const df = () => new Intl.DateTimeFormat(locale(), { timeZone: "Europe/Istanbul", day: "2-digit", month: "short", year: "numeric" });
-const tf = () => new Intl.DateTimeFormat(locale(), { timeZone: "Europe/Istanbul", hour: "2-digit", minute: "2-digit" });
-const localDate = value => new Intl.DateTimeFormat("sv-SE", { timeZone: "Europe/Istanbul" }).format(new Date(value));
-const stamp = value => value ? `${df().format(new Date(value))} · ${tf().format(new Date(value))}` : "—";
+const dateFormats = new Map();
+function formats() {
+  const language = locale();
+  if (!dateFormats.has(language)) dateFormats.set(language, {
+    date: new Intl.DateTimeFormat(language, { timeZone: "Europe/Istanbul", day: "2-digit", month: "short", year: "numeric" }),
+    time: new Intl.DateTimeFormat(language, { timeZone: "Europe/Istanbul", hour: "2-digit", minute: "2-digit" })
+  });
+  return dateFormats.get(language);
+}
+const localDateFormat = new Intl.DateTimeFormat("sv-SE", { timeZone: "Europe/Istanbul" });
+const localDate = value => localDateFormat.format(new Date(value));
+const stamp = value => { if (!value) return "—"; const date = new Date(value), format = formats(); return `${format.date.format(date)} · ${format.time.format(date)}`; };
 const workspace = createWorkspace({ authenticated: () => Boolean(token), stamp });
 function node(tag, text, className) { const el = document.createElement(tag); if (text !== undefined) el.textContent = text; if (className) el.className = className; return el; }
 function notify(message, error = false) { const el = token ? $("dashboard-message") : $("auth-message"); el.textContent = message; el.classList.toggle("error", error); }
@@ -26,12 +34,12 @@ function logout({ preserveDraft = false } = {}) {
     files: selectedPhotos.map(item => item.file), chat: aiAssistant.snapshot() };
   if (!preserveDraft) interruptedDraft = null;
   aiAssistant.reset(); workspace.reset();
-  summary = null; renderSummary(); operationFilters = new URLSearchParams();
+  summary = null; renderSummary(); operationFilters = new URLSearchParams(); boardFilters = new URLSearchParams();
   session.abort(); session = new AbortController(); token = null; user = null; current = undefined; listVersion++; currentVersion++; operationsVersion++;
   document.querySelectorAll("dialog[open]").forEach(dialog => dialog.close()); releasePhoto();
   equipment = []; board = { items: [], page: 1, total: 0 }; history = { items: [], page: 1, total: 0 }; shiftRows = [];
   $("dashboard").hidden = true; $("auth-view").hidden = false;
-  ["login-form", "filter-form", "entry-form", "shift-schedule", "operations-filter"].forEach(id => $(id).reset());
+  ["login-form", "filter-form", "entry-form", "shift-schedule", "operations-filter", "board-filter"].forEach(id => $(id).reset());
   ["shift-rows", "board-entries", "operation-entries", "equipment-grid"].forEach(id => $(id).replaceChildren());
   $("account-name").textContent = ""; $("greeting").textContent = ""; $("scope-field").hidden = true;
   $("auth-message").textContent = ""; $("dashboard-message").textContent = ""; $("email").focus();
@@ -85,7 +93,7 @@ $("login-form").addEventListener("submit", async event => {
       }
       interruptedDraft = null;
     }
-    await Promise.all([loadCurrent(), loadHistory(), loadOperations(), aiAssistant.load()]);
+    await Promise.all([refreshVisible(), aiAssistant.load()]);
   } catch (error) { showError(error instanceof TypeError ? new Error(t("connection")) : error); }
   finally { $("login-button").disabled = false; $("switch-auth").disabled = false; }
 });
@@ -134,7 +142,7 @@ $("shift-button").addEventListener("click", async () => {
   shiftBusy = true; renderCurrent();
   try { await json(ending ? "/shifts/end" : "/shifts/start", "POST", ending ? {} : { shiftDate: $("shift-date").value, scheduledStart, scheduledEnd }); notify(t(ending ? "shiftEnded" : "shiftStarted")); }
   catch (error) { showError(error); }
-  finally { if (token === identity && token) { page = 1; await Promise.all([loadCurrent(), loadHistory(), loadOperations()]); } shiftBusy = false; renderCurrent(); }
+  finally { if (token === identity && token) { page = 1; await refreshVisible(); } shiftBusy = false; renderCurrent(); }
 });
 function filterParams() { const params = new URLSearchParams(); if ($("from").value) params.set("from", $("from").value); if ($("to").value) params.set("to", $("to").value); if (user?.role === "MANAGER" && $("scope").value === "all") params.set("scope", "all"); return params; }
 const filtersMatch = () => filterParams().toString() === applied.toString();
@@ -194,41 +202,70 @@ function entryCard(item) {
 }
 function renderEntries() {
   for (const [state, prefix] of [[board, "board"], [history, "operation"]]) {
-    $(prefix === "board" ? "board-entries" : "operation-entries").replaceChildren(...(state.items.length ? state.items.map(entryCard) : [node("p", t(prefix === "board" ? "noOpen" : operationFilters.size ? "noOperationResults" : "noEntries"), "empty-state")]));
+    $(prefix === "board" ? "board-entries" : "operation-entries").replaceChildren(...(state.items.length ? state.items.map(entryCard) : [node("p", t(prefix === "board" ? boardFilters.size ? "noOperationResults" : "noOpen" : operationFilters.size ? "noOperationResults" : "noEntries"), "empty-state")]));
     $(prefix === "board" ? "board-count" : "operation-count").textContent = state.total;
     $(`${prefix}-page`).textContent = state.total ? t("pageLabel", { from: (state.page - 1) * 20 + 1, to: Math.min(state.page * 20, state.total), total: state.total }) : t("zero");
     $(`${prefix}-previous`).disabled = state.page <= 1; $(`${prefix}-next`).disabled = state.page * 20 >= state.total;
   }
 }
-async function loadOperations({ boardPage = board.page, historyPage = history.page } = {}) {
-  const version = ++operationsVersion;
+// Each page loads its own lists; entering a page always refreshes its snapshot.
+async function loadOperations({ boardPage = board.page, historyPage = history.page, scope = workspace.page, boardQuery = boardFilters } = {}) {
+  if (scope === "new-record") return;
+  const version = ++operationsVersion, identity = token;
+  const needsSummary = scope === "overview" || scope === "handover", needsBoard = scope === "handover" || scope === "board", needsHistory = scope === "history";
   $("refresh-operations").disabled = true;
-  for (const prefix of ["board", "operation"]) for (const direction of ["previous", "next"]) $(`${prefix}-${direction}`).disabled = true;
+  if (needsBoard) { $("board-apply").disabled = true; $("board-clear").disabled = true; $("board-entries").setAttribute("aria-busy", "true"); }
+  for (const prefix of needsBoard ? ["board"] : needsHistory ? ["operation"] : []) for (const direction of ["previous", "next"]) $(`${prefix}-${direction}`).disabled = true;
   try {
     const query = new URLSearchParams(operationFilters);
     query.set("view", operationFilters.size ? "all" : "history"); query.set("page", historyPage);
-    const [overview, open, entries] = await Promise.all([api("/operations/summary").then(r => r.json()), api(`/operations/entries?view=open&page=${boardPage}`).then(r => r.json()), api(`/operations/entries?${query}`).then(r => r.json())]);
-    if (!token || version !== operationsVersion) return;
-    const validBoardPage = Math.min(open.page, Math.max(1, Math.ceil(open.total / 20)));
-    const validHistoryPage = Math.min(entries.page, Math.max(1, Math.ceil(entries.total / 20)));
-    if (validBoardPage !== open.page || validHistoryPage !== entries.page) {
-      return loadOperations({ boardPage: validBoardPage, historyPage: validHistoryPage });
+    const openQuery = new URLSearchParams(boardQuery); openQuery.set("view", "open"); openQuery.set("page", boardPage);
+    const [overview, open, entries] = await Promise.all([
+      needsSummary ? api("/operations/summary").then(r => r.json()) : null,
+      needsBoard ? api(`/operations/entries?${openQuery}`).then(r => r.json()) : null,
+      needsHistory ? api(`/operations/entries?${query}`).then(r => r.json()) : null
+    ]);
+    if (!token || identity !== token || version !== operationsVersion) return;
+    const validBoardPage = open ? Math.min(open.page, Math.max(1, Math.ceil(open.total / 20))) : boardPage;
+    const validHistoryPage = entries ? Math.min(entries.page, Math.max(1, Math.ceil(entries.total / 20))) : historyPage;
+    if ((open && validBoardPage !== open.page) || (entries && validHistoryPage !== entries.page)) return loadOperations({ boardPage: validBoardPage, historyPage: validHistoryPage, scope, boardQuery });
+    if (overview) {
+      const changed = JSON.stringify(summary) !== JSON.stringify(overview);
+      summary = overview; equipment = overview.equipment;
+      if (changed) { renderSummary(); renderEquipment(); }
+      workspace.render({ summary, checkedAt: new Date(), stale: false });
     }
-    summary = overview; equipment = overview.equipment; board = open; history = entries;
-    renderSummary(); renderEquipment(); renderEntries(); workspace.render({ summary, checkedAt: new Date(), stale: false });
-  } catch (error) { if (version === operationsVersion) { showError(error); renderEntries(); workspace.render({ stale: true }); } }
-  finally { if (version === operationsVersion) $("refresh-operations").disabled = false; }
+    if (open) { const filtersChanged = boardFilters.toString() !== boardQuery.toString(); boardFilters = new URLSearchParams(boardQuery); const changed = filtersChanged || JSON.stringify(board) !== JSON.stringify(open); board = open; if (changed) renderEntries(); }
+    if (entries) { const changed = JSON.stringify(history) !== JSON.stringify(entries); history = entries; if (changed) renderEntries(); }
+  } catch (error) {
+    if (identity === token && version === operationsVersion) { showError(error); if (needsSummary) workspace.render({ stale: true }); if (needsBoard) for (const name of ["kind", "equipment", "priority"]) $("board-filter").elements.namedItem(name).value = boardFilters.get(name) || ""; }
+  } finally {
+    if (version === operationsVersion) { $("refresh-operations").disabled = false; $("board-apply").disabled = false; $("board-clear").disabled = false; $("board-entries").setAttribute("aria-busy", "false"); updateEntryPagination(); }
+  }
 }
-$("refresh-operations").addEventListener("click", loadOperations);
+function updateEntryPagination() {
+  for (const [state, prefix] of [[board, "board"], [history, "operation"]]) {
+    $(`${prefix}-previous`).disabled = state.page <= 1;
+    $(`${prefix}-next`).disabled = state.page * 20 >= state.total;
+  }
+}
+async function refreshVisible() {
+  if (!token) return;
+  const scope = workspace.page;
+  if (scope === "new-record") return;
+  await Promise.all([loadOperations({ scope }), ...(scope === "history" ? [loadHistory()] : [loadCurrent()])]);
+}
+window.addEventListener("workspacechange", () => { if (token) refreshVisible(); });
+$("refresh-operations").addEventListener("click", () => loadOperations());
 $("overview-refresh").addEventListener("click", async () => {
   $("overview-refresh").disabled = true;
-  try { await Promise.all([loadOperations(), loadCurrent()]); }
+  try { await refreshVisible(); }
   finally { $("overview-refresh").disabled = false; }
 });
 for (const [prefix, isBoard] of [["board", true], ["operation", false]]) for (const direction of ["previous", "next"]) {
   $(`${prefix}-${direction}`).addEventListener("click", async () => {
     const state = isBoard ? board : history, target = Math.max(1, state.page + (direction === "next" ? 1 : -1));
-    await loadOperations(isBoard ? { boardPage: target } : { historyPage: target });
+    await loadOperations(isBoard ? { boardPage: target, scope: "board" } : { historyPage: target, scope: "history" });
   });
 }
 $("equipment-form").addEventListener("submit", async event => {
@@ -246,7 +283,7 @@ $("entry-form").addEventListener("submit", async event => {
   selectedPhotos.forEach(item => body.append("photos", item.file));
   const controls = [...$("entry-form").querySelectorAll("input,select,textarea,button"), ...document.querySelectorAll("[data-quick-kind]")].map(element => ({ element, disabled: element.disabled }));
   entrySending = true; aiAssistant.render(); controls.forEach(({ element }) => { element.disabled = true; }); $("entry-save").textContent = t("saveProgress");
-  try { await api("/operations/entries", { method: "POST", body }); $("entry-form").reset(); board.page = 1; history.page = 1; notify(t("entrySaved")); await loadOperations(); }
+  try { await api("/operations/entries", { method: "POST", body }); $("entry-form").reset(); board.page = 1; history.page = 1; notify(t("entrySaved")); await loadOperations({ scope: workspace.page === "new-record" ? "overview" : workspace.page }); }
   catch (error) { showError(error); }
   finally { entrySending = false; controls.forEach(({ element, disabled }) => { element.disabled = disabled; }); $("entry-save").textContent = t("save"); aiAssistant.render(); }
 });
@@ -258,7 +295,14 @@ $("close-form").addEventListener("submit", async event => {
 });
 document.querySelectorAll("[data-close]").forEach(button => button.addEventListener("click", () => $(button.dataset.close).close()));
 $("photo-dialog").addEventListener("close", releasePhoto);
-setInterval(() => { if (token && document.visibilityState === "visible") Promise.all([loadOperations(), loadCurrent()]); }, 30000);
+let backgroundRefresh = false;
+async function refreshLivePage() {
+  if (!token || backgroundRefresh || document.visibilityState !== "visible" || !["overview", "handover"].includes(workspace.page)) return;
+  backgroundRefresh = true;
+  try { await refreshVisible(); } finally { backgroundRefresh = false; }
+}
+setInterval(refreshLivePage, 30000);
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") refreshLivePage(); });
 window.addEventListener("languagechange", () => { renderAuth(); notify(""); if (token) { renderIdentity(); renderCurrent(); renderRows(); renderSummary(); renderEquipment(); renderEntries(); renderPhotos(); } });
 function renderSummary() {
   if (!summary) {
@@ -281,7 +325,7 @@ $("summary-read").addEventListener("click", async () => {
   if (!summary || summaryBusy) return; summaryBusy = true; renderSummary();
   try { await json("/operations/summary/read", "POST", { revision: summary.revision }); notify(t("summarySaved")); }
   catch (error) { showError(error); }
-  finally { summaryBusy = false; if (token) await loadOperations(); }
+  finally { summaryBusy = false; renderSummary(); if (token) await loadOperations(); }
 });
 function draftDirty() { return Boolean($("entry-title").value.trim() || $("entry-description").value.trim() || selectedPhotos.length); }
 function renderPhotos() {
@@ -321,3 +365,12 @@ $("operations-filter").addEventListener("submit", async event => {
 });
 $("operations-clear").addEventListener("click", async () => { $("operations-filter").reset(); operationFilters = new URLSearchParams(); history.page = 1; await loadOperations(); });
 initializeLanguage(); workspace.start(); renderAuth(); renderPhotos();
+
+$("board-filter").addEventListener("submit", async event => {
+  event.preventDefault(); const filters = new URLSearchParams();
+  for (const [key, value] of new FormData($("board-filter"))) if (String(value)) filters.set(key, String(value));
+  await loadOperations({ scope: "board", boardPage: 1, boardQuery: filters });
+});
+$("board-clear").addEventListener("click", async () => {
+  $("board-filter").reset(); await loadOperations({ scope: "board", boardPage: 1, boardQuery: new URLSearchParams() });
+});

@@ -19,12 +19,19 @@ test("overview includes normal attention items, prioritizes important work, and 
     const summary = async () => (await request(app).get("/operations/summary").set("Authorization", auth).expect(200)).body;
     const first = await summary();
     assert.equal(first.counts.ATTENTION, 2);
+    assert.deepEqual(first.openItems.map((item: any) => item.id), [high.id, normal.id]);
+    assert.equal(new Set(first.openItems.map((item: any) => item.id)).size, first.openItems.length);
     assert.deepEqual(first.attention.map((item: any) => item.id), [high.id, normal.id]);
     assert.ok(first.important.some((item: any) => item.id === high.id));
     assert.ok(!first.important.some((item: any) => item.id === normal.id));
     await request(app).post(`/operations/entries/${normal.id}/close`).set("Authorization", auth).send({ closeNote: "Checked" }).expect(200);
+    const filtered = await request(app).get("/operations/entries?view=open&kind=ATTENTION&equipment=GENERAL&priority=HIGH").set("Authorization", auth).expect(200);
+    assert.deepEqual(filtered.body.items.map((item: any) => item.id), [high.id]);
+    await request(app).get("/operations/entries?view=open&priority=URGENT").set("Authorization", auth).expect(400);
+    await request(app).get("/operations/entries?view=open&priority[]=HIGH").set("Authorization", auth).expect(400);
     const after = await summary();
     assert.equal(after.counts.ATTENTION, 1);
+    assert.ok(!after.openItems.some((item: any) => item.id === normal.id));
     assert.ok(!after.attention.some((item: any) => item.id === normal.id));
     assert.ok((await db.operationEntry.findUniqueOrThrow({ where: { id: normal.id } })).closedAt);
   } finally {

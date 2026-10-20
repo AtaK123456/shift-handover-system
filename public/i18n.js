@@ -1,4 +1,9 @@
 const messages = {
+  allPriorities:["Tüm önem dereceleri", "All priorities"],
+  overviewOpenTitle:["Açık İşler ve Uyarılar", "Open Work & Alerts"],
+  overviewOpenHint:["Önemli kayıtlar önce gösterilir. Her kayıt bir kez listelenir; kapatılana kadar vardiyalar arasında görünür kalır.", "Important items appear first. Each entry is listed once and stays visible across shifts until closed."],
+  overviewPreview:["{shown} / {total} açık kayıt gösteriliyor. Tam liste Devir Panosu’nda.", "Showing {shown} of {total} open items. Full list in Handover."],
+
   openRecords:["Açık kayıtlar", "Open records"],
   overviewAttention:["Dikkat Edilecek Konular", "Items to Watch"],
   openWorkHint:["Tamamlanıp kapatılana kadar sonraki vardiyalara aktarılır. Önemli işler önce gösterilir.", "Carried into the next shift until closed. Important work appears first."],

@@ -50,7 +50,8 @@ test("theme is shared by login/dashboard/logout, and mobile controls fit", async
   await page.getByLabel("E-posta adresi").fill("test@example.com");
   await page.getByLabel("Şifre", { exact: true }).fill("test-password-123");
   await page.getByRole("button", { name: /Giriş yap/ }).click();
-  await expect(page.locator("#shift-rows tr")).toHaveCount(1);
+  await expect(page.locator("#dashboard")).toBeVisible();
+  await expect(page.locator("#overview-updated")).toContainText("Son veri kontrolü");
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
   await expect(page.getByRole("switch", { name: "Koyu tema", exact: true })).toBeVisible();
   await page.screenshot({ path: "../dark-mode-desktop.png", fullPage: true });
