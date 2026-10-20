@@ -1,3 +1,4 @@
+import { navigate } from "./navigation.js";
 import { test, expect, type Page } from "@playwright/test";
 import { randomUUID } from "node:crypto";
 import sharp from "sharp";
@@ -25,6 +26,7 @@ async function login(page: Page, index = 0) {
 }
 async function expire(page: Page) {
   await page.route(/\/operations\/entries\?view=open/, route => route.fulfill({ status: 401, json: { error: "Expired" } }), { times: 1 });
+  await navigate(page, "handover");
   await page.locator("#refresh-operations").click();
   await expect(page.locator("#auth-view")).toBeVisible();
 }
@@ -33,8 +35,10 @@ test("overview acknowledgement, quick photo entry, draft protection and combined
   const errors: string[] = []; page.on("pageerror", error => errors.push(error.message));
   await page.goto("/app/"); await login(page);
   await expect(page.locator("#summary-read")).toBeDisabled();
+  await navigate(page, "handover");
   await page.locator("#shift-button").click();
   await expect(page.locator("#summary-read")).toBeEnabled();
+  await navigate(page, "new-record");
   await page.locator('[data-quick-kind="VALVE"]').click();
   await expect(page.locator("#entry-kind")).toHaveValue("VALVE");
   const title = `UX Pump ${suffix}`;
@@ -59,8 +63,10 @@ test("overview acknowledgement, quick photo entry, draft protection and combined
   await page.locator("#entry-save").click();
   await expect(page.locator("#board-entries .entry-card").filter({ hasText: title })).toHaveCount(1);
   await expect(page.locator("#photo-previews figure")).toHaveCount(0); await expect(page.locator("#draft-hint")).toBeHidden();
+  await navigate(page, "handover");
   await page.locator("#summary-read").click();
   await expect(page.locator("#summary-read")).toBeDisabled(); await expect(page.locator("#summary-read-status")).toContainText("onaylandı");
+  await navigate(page, "history");
   await page.locator("#operations-q").fill(suffix); await page.locator("#operations-unit").selectOption("GT1");
   await page.locator("#operations-kind").selectOption("TASK"); await page.locator("#operations-status").selectOption("open");
   await page.locator('#operations-filter button[type="submit"]').click();
@@ -73,6 +79,7 @@ test("overview acknowledgement, quick photo entry, draft protection and combined
   await page.locator("#operations-status").selectOption("closed"); await page.locator('#operations-filter button[type="submit"]').click();
   await expect(result.getByText("Kontrol tamamlandı", { exact: true })).toBeVisible();
   await page.locator("#operations-clear").click();
+  await navigate(page, "new-record");
   await page.locator("#entry-title").fill("Kaydedilmemiş özel not"); await page.locator("#entry-description").fill("Aynı hesapla geri gelmeli");
   await page.locator("#entry-photos").setInputFiles({ name: "draft.png", mimeType: "image/png", buffer });
   await expire(page);
@@ -89,6 +96,7 @@ test("overview acknowledgement, quick photo entry, draft protection and combined
 test("record search retains unit and text filters when paging", async ({ page }) => {
   await db.operationEntry.createMany({ data: Array.from({ length: 24 }, (_, i) => ({ authorId: users[1]!, kind: "NOTE" as const, title: `Pagination ${suffix} ${i}`, description: "Search test", equipmentCode: "ST" })) });
   await page.goto("/app/"); await login(page, 1);
+  await navigate(page, "history");
   await page.locator("#operations-q").fill(`Pagination ${suffix}`); await page.locator("#operations-unit").selectOption("ST");
   await page.locator('#operations-filter button[type="submit"]').click();
   await expect(page.locator("#operation-entries .entry-card")).toHaveCount(20);

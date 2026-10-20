@@ -1,3 +1,4 @@
+import { navigate } from "./navigation.js";
 import { test, expect, type Page } from "@playwright/test";
 // Multi-step chat flows also run on resource-constrained CI workers.
 test.setTimeout(60_000);
@@ -20,6 +21,7 @@ async function signIn(page: Page, enabled = true) {
   await expect(page.locator("#ai-status")).not.toHaveText("AI kullanılabilirliği kontrol ediliyor…");
 }
 async function fillEntry(page: Page) {
+  await navigate(page, "new-record");
   await page.locator("#entry-title").fill("Titreşim gözlemi");
   await page.locator("#entry-description").fill("GT1 ünitesinde titreşim artışı gözlendi. Bakım ekibinin kontrol etmesi gerekiyor.");
   if (await page.locator("#ai-chat").isHidden()) await page.locator("#ai-launcher").click();

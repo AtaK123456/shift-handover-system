@@ -1,3 +1,4 @@
+import { navigate } from "./navigation.js";
 import { test, expect, type Page } from "@playwright/test";
 import { randomUUID } from "node:crypto";
 import ExcelJS from "exceljs";
@@ -30,6 +31,7 @@ async function login(page: Page, email = workerEmail) {
   await page.getByLabel("Şifre", { exact: true }).fill(password);
   await page.getByRole("button", { name: /Giriş yap/ }).click();
   await expect(page.locator("#dashboard")).toBeVisible();
+  await navigate(page, "history");
   await expect(page.getByRole("button", { name: /Excel’e aktar/ })).toBeEnabled();
 }
 test("login, start/end shift, filtered history and real Excel download", async ({ page }) => {
@@ -38,11 +40,13 @@ test("login, start/end shift, filtered history and real Excel download", async (
   await login(page);
   await expect(page.locator("#scope-field")).toBeHidden();
   await expect(page.getByText("Henüz bir vardiya kaydı yok.")).toBeVisible();
+  await navigate(page, "handover");
   await page.getByRole("button", { name: /Vardiyayı başlat/ }).click();
   await expect(page.getByRole("heading", { name: "Vardiyan devam ediyor." })).toBeVisible();
   await expect(page.locator("#shift-rows tr")).toHaveCount(1);
   await page.getByRole("button", { name: /Vardiyayı bitir/ }).click();
   await expect(page.getByRole("heading", { name: "Yeni bir vardiyaya hazır mısın?" })).toBeVisible();
+  await navigate(page, "history");
   await expect(page.locator("#shift-rows").getByText("Tamamlandı")).toBeVisible();
   const downloading = page.waitForEvent("download");
   await page.getByRole("button", { name: /Excel’e aktar/ }).click();
@@ -74,6 +78,7 @@ test("manager can select team records", async ({ page }) => {
 test("mobile layout and logout", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await login(page);
+  await navigate(page, "handover");
   await expect(page.getByRole("button", { name: /Vardiyayı başlat/ })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   await page.screenshot({ path: "../frontend-mobile.png", fullPage: true });
@@ -91,6 +96,6 @@ test("registration creates a worker who can sign in", async ({ page }) => {
   await expect(page.getByText("Hesabın oluşturuldu. Şimdi giriş yapabilirsin.")).toBeVisible();
   await page.getByLabel("Şifre", { exact: true }).fill(password);
   await page.getByRole("button", { name: /Giriş yap/ }).click();
-  await expect(page.getByRole("heading", { name: "Merhaba, Yeni." })).toBeVisible();
+  await expect(page.locator("#greeting")).toBeVisible();
   await expect(page.locator("#scope-field")).toBeHidden();
 });

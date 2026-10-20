@@ -217,6 +217,37 @@ and survives refreshes, screen changes, and logout. Passwords and tokens are
 not stored with this preference. If browser storage is unavailable, the theme
 still works for the current page and falls back to the device preference next time.
 
+## Workspace navigation
+
+After sign-in, **Overview** shows the current shift, important open records,
+GT1/GT2/ST statuses, ongoing tasks, active valves, and recent events/notes.
+It contains observation cards and links to the work pages; it does not expose
+record forms, equipment updates, shift start/end, closure, or acknowledgment
+controls. Clicking a record opens read-only details.
+
+- **New Entry** (`/app/#new-record`): choose event, note, valve, attention, or
+  task; enter details and attach photos.
+- **Handover** (`/app/#handover`): start/end the shift, acknowledge the handover
+  summary, update equipment, and close open work with a note.
+- **History & Reports** (`/app/#history`): search records and shifts, apply filters,
+  and download the existing shift Excel export.
+
+Desktop uses a left navigation menu; mobile uses a fixed bottom menu. Browser
+Back/Forward works between sections. These sections share the authenticated page
+and in-memory form state: switching sections retains text and selected photos.
+Reloading still ends the in-memory session; logout clears drafts and observation
+snapshots. Language/theme controls and AI chat remain available across sections.
+Accepting AI suggestions opens New Entry without saving automatically.
+
+The overview refreshes every 30 seconds while the tab is visible and provides a
+manual Refresh button. Failed record or current-shift refreshes display an
+outdated-data warning while retaining the last successful snapshot. Each
+important/task/valve/recent preview is capped at five records; task and valve
+counts come from the same summary transaction, independent of board pagination.
+Complete equipment notes and work controls are available in Handover. The summary
+API additionally returns bounded `tasks` and `valves` previews, and existing
+previews include descriptions and timestamps. No database migration is required.
+
 ## Plant handover dashboard
 
 - GT1/GT2 gas turbines and the ST steam turbine support **Unspecified / Active /
@@ -257,7 +288,7 @@ All operation endpoints require `Authorization: Bearer <token>`:
 
 ### Handover overview and acknowledgment
 
-The overview shows equipment status, total open and important record counts,
+On Handover, the acknowledgment summary shows equipment status, total open and important record counts,
 important open titles, and recent event/note titles. Each title list contains
 at most five items; use the handover board to review all open records.
 After starting an active shift, select **I have read the handover summary**.
