@@ -44,12 +44,12 @@ export function createWorkspace({ authenticated, stamp }) {
     if (key === contentKey) return;
     contentKey = key;
     $("overview-counts").replaceChildren(...[["summaryOpen", "total"], ["summaryImportant", "important"], ["overviewTasks", "TASK"], ["overviewAttention", "ATTENTION"]].map(([label, countKey]) => {
-      const card = make("div", undefined, "overview-count");
+      const card = make("div", undefined, "overview-count"); card.dataset.category = countKey;
       card.append(make("strong", summary ? String(summary.counts[countKey]) : "—"), make("span", t(label)));
       return card;
     }));
     $("overview-equipment").replaceChildren(...(summary?.equipment || []).map(item => {
-      const card = make("article", undefined, "equipment-card"); const head = make("div", undefined, "section-title");
+      const card = make("article", undefined, "equipment-card"); card.dataset.status = item.status; const head = make("div", undefined, "section-title");
       head.append(make("h3", item.code), make("span", t(item.status), `unit-status unit-${item.status.toLowerCase()}`));
       card.append(head, make("p", item.note || "—", "equipment-note"));
       card.title = item.updatedAt ? stamp(item.updatedAt) : t("neverUpdated");
@@ -61,7 +61,7 @@ export function createWorkspace({ authenticated, stamp }) {
       const children = (items || []).map(item => {
         const button = make("button", undefined, `observation-card${item.priority === "HIGH" ? " important" : ""}`); button.type = "button"; button.dataset.entryId = item.id;
         const meta = make("span", undefined, "entry-meta");
-        meta.append(make("span", item.equipmentCode || t("general"), "status"), make("span", t(item.kind), "entry-kind"));
+        meta.append(make("span", item.equipmentCode || t("general"), "status"), make("span", t(item.kind), `entry-kind kind-${item.kind}`));
         if (item.priority === "HIGH") meta.append(make("span", t("HIGH"), "priority-high"));
         button.append(meta, make("strong", item.title), make("span", item.description || t("viewDetails"), "observation-excerpt"));
         if (item.createdAt) button.append(make("span", t(recent ? "recentOn" : "openedOn", { date: stamp(item.createdAt) }), "hint"));
