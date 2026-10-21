@@ -1,3 +1,4 @@
+import { createProgressNotes } from "./progress-notes.js";
 import { createWorkspace } from "./workspace.js";
 import { createAiAssistant } from "./ai-assistant.js";
 import { t, locale, lang, apiError, initializeLanguage } from "./i18n.js";
@@ -8,12 +9,22 @@ let session = new AbortController(), equipment = [], selectedEquipment = null, c
 let board = { items: [], page: 1, total: 0 }, history = { items: [], page: 1, total: 0 }, shiftRows = [];
 let operationsVersion = 0, summary = null, summaryBusy = false;
 let selectedPhotos = [], interruptedDraft = null, entrySending = false;
-let operationFilters = new URLSearchParams();
+let operationFilters = new URLSearchParams(), boardFilters = new URLSearchParams();
 const aiAssistant = createAiAssistant({ api, isSaving: () => entrySending });
-const df = () => new Intl.DateTimeFormat(locale(), { timeZone: "Europe/Istanbul", day: "2-digit", month: "short", year: "numeric" });
-const tf = () => new Intl.DateTimeFormat(locale(), { timeZone: "Europe/Istanbul", hour: "2-digit", minute: "2-digit" });
-const localDate = value => new Intl.DateTimeFormat("sv-SE", { timeZone: "Europe/Istanbul" }).format(new Date(value));
-const stamp = value => value ? `${df().format(new Date(value))} · ${tf().format(new Date(value))}` : "—";
+const dateFormats = new Map();
+function formats() {
+  const language = locale();
+  if (!dateFormats.has(language)) dateFormats.set(language, {
+    date: new Intl.DateTimeFormat(language, { timeZone: "Europe/Istanbul", day: "2-digit", month: "short", year: "numeric" }),
+    time: new Intl.DateTimeFormat(language, { timeZone: "Europe/Istanbul", hour: "2-digit", minute: "2-digit" })
+  });
+  return dateFormats.get(language);
+}
+const localDateFormat = new Intl.DateTimeFormat("sv-SE", { timeZone: "Europe/Istanbul" });
+const localDate = value => localDateFormat.format(new Date(value));
+const stamp = value => { if (!value) return "—"; const date = new Date(value), format = formats(); return `${format.date.format(date)} · ${format.time.format(date)}`; };
+const progressNotes = createProgressNotes({ api, stamp, onSaved: refreshVisible });
+window.addEventListener("entry-updates-open", event => progressNotes.open(event.detail, { readOnly: true }));
 const workspace = createWorkspace({ authenticated: () => Boolean(token), stamp });
 function node(tag, text, className) { const el = document.createElement(tag); if (text !== undefined) el.textContent = text; if (className) el.className = className; return el; }
 function notify(message, error = false) { const el = token ? $("dashboard-message") : $("auth-message"); el.textContent = message; el.classList.toggle("error", error); }
@@ -21,17 +32,17 @@ function showError(error) { if (error.name !== "AbortError") notify(error.messag
 async function failure(response) { try { return apiError((await response.json()).error) || t("failed"); } catch { return t("failed"); } }
 function releasePhoto() { if (photoUrl) URL.revokeObjectURL(photoUrl); photoUrl = null; $("entry-photo").removeAttribute("src"); }
 function logout({ preserveDraft = false } = {}) {
-  if (preserveDraft && user && (draftDirty() || aiAssistant.dirty())) interruptedDraft = { ownerId: user.id,
+  if (preserveDraft && user && (draftDirty() || aiAssistant.dirty() || progressNotes.dirty())) interruptedDraft = { ownerId: user.id,
     values: Object.fromEntries(["entry-kind", "entry-priority", "entry-unit", "entry-title", "entry-description"].map(id => [id, $(id).value])),
-    files: selectedPhotos.map(item => item.file), chat: aiAssistant.snapshot() };
+    files: selectedPhotos.map(item => item.file), chat: aiAssistant.snapshot(), updates: progressNotes.snapshot() };
   if (!preserveDraft) interruptedDraft = null;
-  aiAssistant.reset(); workspace.reset();
-  summary = null; renderSummary(); operationFilters = new URLSearchParams();
+  aiAssistant.reset(); progressNotes.reset(); workspace.reset();
+  summary = null; renderSummary(); operationFilters = new URLSearchParams(); boardFilters = new URLSearchParams();
   session.abort(); session = new AbortController(); token = null; user = null; current = undefined; listVersion++; currentVersion++; operationsVersion++;
   document.querySelectorAll("dialog[open]").forEach(dialog => dialog.close()); releasePhoto();
   equipment = []; board = { items: [], page: 1, total: 0 }; history = { items: [], page: 1, total: 0 }; shiftRows = [];
   $("dashboard").hidden = true; $("auth-view").hidden = false;
-  ["login-form", "filter-form", "entry-form", "shift-schedule", "operations-filter"].forEach(id => $(id).reset());
+  ["login-form", "filter-form", "entry-form", "shift-schedule", "operations-filter", "board-filter"].forEach(id => $(id).reset());
   ["shift-rows", "board-entries", "operation-entries", "equipment-grid"].forEach(id => $(id).replaceChildren());
   $("account-name").textContent = ""; $("greeting").textContent = ""; $("scope-field").hidden = true;
   $("auth-message").textContent = ""; $("dashboard-message").textContent = ""; $("email").focus();
@@ -42,7 +53,7 @@ async function api(path, options = {}) {
   try { response = await fetch(path, { ...options, signal: session.signal, headers: { "Accept-Language": lang(), ...options.headers, Authorization: `Bearer ${token}` } }); }
   catch (error) { if (error.name === "AbortError") throw error; throw new Error(t("connection")); }
   if (identity !== token) throw new DOMException("Session changed", "AbortError");
-  if (response.status === 401) { const unsaved = draftDirty() || aiAssistant.dirty(); logout({ preserveDraft: true }); const message = t(unsaved ? "expiredDraft" : "expired"); notify(message, true); throw new Error(message); }
+  if (response.status === 401) { const unsaved = draftDirty() || aiAssistant.dirty() || progressNotes.dirty(); logout({ preserveDraft: true }); const message = t(unsaved ? "expiredDraft" : "expired"); notify(message, true); throw new Error(message); }
   if (!response.ok) {
     let code; try { code = (await response.clone().json()).error; } catch { /* Non-JSON gateway response. */ }
     const error = new Error(await failure(response));
@@ -81,15 +92,15 @@ $("login-form").addEventListener("submit", async event => {
     if (interruptedDraft) {
       if (interruptedDraft.ownerId === user.id) {
         for (const [id, value] of Object.entries(interruptedDraft.values)) $(id).value = value;
-        addPhotos(interruptedDraft.files); aiAssistant.restore(interruptedDraft.chat); notify(t("draftRestored"));
+        addPhotos(interruptedDraft.files); aiAssistant.restore(interruptedDraft.chat); progressNotes.restore(interruptedDraft.updates); notify(t("draftRestored"));
       }
       interruptedDraft = null;
     }
-    await Promise.all([loadCurrent(), loadHistory(), loadOperations(), aiAssistant.load()]);
+    await Promise.all([refreshVisible(), aiAssistant.load()]);
   } catch (error) { showError(error instanceof TypeError ? new Error(t("connection")) : error); }
   finally { $("login-button").disabled = false; $("switch-auth").disabled = false; }
 });
-$("logout").addEventListener("click", () => { if ((draftDirty() || aiAssistant.dirty() || interruptedDraft) && !confirm(t("discardDraft"))) return; logout(); notify(t("signedOut")); });
+$("logout").addEventListener("click", () => { if ((draftDirty() || aiAssistant.dirty() || progressNotes.dirty() || interruptedDraft) && !confirm(t("discardDraft"))) return; logout(); notify(t("signedOut")); });
 function renderIdentity() {
   if (!user) return;
   $("greeting").textContent = t("greeting", { name: user.name.trim().split(/\s+/)[0] }); $("account-role").textContent = t(user.role);
@@ -134,7 +145,7 @@ $("shift-button").addEventListener("click", async () => {
   shiftBusy = true; renderCurrent();
   try { await json(ending ? "/shifts/end" : "/shifts/start", "POST", ending ? {} : { shiftDate: $("shift-date").value, scheduledStart, scheduledEnd }); notify(t(ending ? "shiftEnded" : "shiftStarted")); }
   catch (error) { showError(error); }
-  finally { if (token === identity && token) { page = 1; await Promise.all([loadCurrent(), loadHistory(), loadOperations()]); } shiftBusy = false; renderCurrent(); }
+  finally { if (token === identity && token) { page = 1; await refreshVisible(); } shiftBusy = false; renderCurrent(); }
 });
 function filterParams() { const params = new URLSearchParams(); if ($("from").value) params.set("from", $("from").value); if ($("to").value) params.set("to", $("to").value); if (user?.role === "MANAGER" && $("scope").value === "all") params.set("scope", "all"); return params; }
 const filtersMatch = () => filterParams().toString() === applied.toString();
@@ -170,7 +181,7 @@ $("export-button").addEventListener("click", async () => {
 });
 function renderEquipment() {
   $("equipment-grid").replaceChildren(...equipment.map(item => {
-    const card = node("article", undefined, "equipment-card"); const heading = node("div", undefined, "section-title"); heading.append(node("h3", item.code), node("span", t(item.status), `unit-status unit-${item.status.toLowerCase()}`));
+    const card = node("article", undefined, "equipment-card"); card.dataset.status = item.status; const heading = node("div", undefined, "section-title"); heading.append(node("h3", item.code), node("span", t(item.status), `unit-status unit-${item.status.toLowerCase()}`));
     card.append(heading, node("p", item.note || "—", "equipment-note"), node("p", item.updatedAt ? `${item.updatedBy?.name || "—"} · ${stamp(item.updatedAt)}` : t("neverUpdated"), "hint"));
     const button = node("button", t("update"), "button secondary small"); button.type = "button";
     button.addEventListener("click", () => { selectedEquipment = { ...item }; $("equipment-dialog-title").textContent = `${item.code} · ${t("update")}`; $("equipment-status").value = item.status; $("equipment-note").value = item.note; $("equipment-message").textContent = ""; $("equipment-dialog").showModal(); });
@@ -182,9 +193,15 @@ async function viewPhoto(id) {
 }
 function entryCard(item) {
   const card = node("article", undefined, `entry-card${item.priority === "HIGH" ? " important" : ""}`);
-  const meta = node("div", undefined, "entry-meta"); meta.append(node("span", t(item.kind), "entry-kind"), node("span", item.equipmentCode || t("general"), "status")); if (item.priority === "HIGH") meta.append(node("span", t("HIGH"), "priority-high")); if (item.closedAt) meta.append(node("span", t("closed"), "status"));
+  const meta = node("div", undefined, "entry-meta"); meta.append(node("span", t(item.kind), `entry-kind kind-${item.kind}`), node("span", item.equipmentCode || t("general"), "status")); if (item.priority === "HIGH") meta.append(node("span", t("HIGH"), "priority-high")); if (item.closedAt) meta.append(node("span", t("closed"), "status"));
   card.append(meta, node("h3", item.title), node("p", item.description, "entry-description"), node("p", `${item.author.name} · ${stamp(item.createdAt)}${item.shiftId ? ` · #${item.shiftId}` : ""}`, "hint"));
   const actions = node("div", undefined, "entry-actions");
+  if (["TASK", "VALVE", "ATTENTION"].includes(item.kind)) {
+    const updates = node("button", t("updates", { count: item._count?.updates || 0 }), "button quiet small"); updates.type = "button";
+    updates.dataset.updatesFor = item.id;
+    updates.addEventListener("click", () => progressNotes.open(item)); actions.append(updates);
+    if (item.updates?.[0]) { const last = item.updates[0]; card.append(node("p", t("latestUpdate", { text: last.body }), "latest-update"), node("p", `${last.author.name} · ${stamp(last.createdAt)}`, "hint")); }
+  }
   item.photos.forEach((photo, index) => { const button = node("button", t("viewPhoto", { number: index + 1 }), "button quiet small"); button.type = "button"; button.addEventListener("click", () => viewPhoto(photo.id)); actions.append(button); });
   if (!item.closedAt && ["VALVE", "ATTENTION", "TASK"].includes(item.kind)) {
     const close = node("button", t("closeItem"), "button secondary small"); close.type = "button"; close.addEventListener("click", () => { closingEntry = item.id; $("close-title").textContent = item.title; $("close-note").value = ""; $("close-message").textContent = ""; $("close-dialog").showModal(); }); actions.append(close);
@@ -194,41 +211,70 @@ function entryCard(item) {
 }
 function renderEntries() {
   for (const [state, prefix] of [[board, "board"], [history, "operation"]]) {
-    $(prefix === "board" ? "board-entries" : "operation-entries").replaceChildren(...(state.items.length ? state.items.map(entryCard) : [node("p", t(prefix === "board" ? "noOpen" : operationFilters.size ? "noOperationResults" : "noEntries"), "empty-state")]));
+    $(prefix === "board" ? "board-entries" : "operation-entries").replaceChildren(...(state.items.length ? state.items.map(entryCard) : [node("p", t(prefix === "board" ? boardFilters.size ? "noOperationResults" : "noOpen" : operationFilters.size ? "noOperationResults" : "noEntries"), "empty-state")]));
     $(prefix === "board" ? "board-count" : "operation-count").textContent = state.total;
     $(`${prefix}-page`).textContent = state.total ? t("pageLabel", { from: (state.page - 1) * 20 + 1, to: Math.min(state.page * 20, state.total), total: state.total }) : t("zero");
     $(`${prefix}-previous`).disabled = state.page <= 1; $(`${prefix}-next`).disabled = state.page * 20 >= state.total;
   }
 }
-async function loadOperations({ boardPage = board.page, historyPage = history.page } = {}) {
-  const version = ++operationsVersion;
+// Each page loads its own lists; entering a page always refreshes its snapshot.
+async function loadOperations({ boardPage = board.page, historyPage = history.page, scope = workspace.page, boardQuery = boardFilters } = {}) {
+  if (scope === "new-record") return;
+  const version = ++operationsVersion, identity = token;
+  const needsSummary = scope === "overview" || scope === "handover", needsBoard = scope === "handover" || scope === "board", needsHistory = scope === "history";
   $("refresh-operations").disabled = true;
-  for (const prefix of ["board", "operation"]) for (const direction of ["previous", "next"]) $(`${prefix}-${direction}`).disabled = true;
+  if (needsBoard) { $("board-apply").disabled = true; $("board-clear").disabled = true; $("board-entries").setAttribute("aria-busy", "true"); }
+  for (const prefix of needsBoard ? ["board"] : needsHistory ? ["operation"] : []) for (const direction of ["previous", "next"]) $(`${prefix}-${direction}`).disabled = true;
   try {
     const query = new URLSearchParams(operationFilters);
     query.set("view", operationFilters.size ? "all" : "history"); query.set("page", historyPage);
-    const [overview, open, entries] = await Promise.all([api("/operations/summary").then(r => r.json()), api(`/operations/entries?view=open&page=${boardPage}`).then(r => r.json()), api(`/operations/entries?${query}`).then(r => r.json())]);
-    if (!token || version !== operationsVersion) return;
-    const validBoardPage = Math.min(open.page, Math.max(1, Math.ceil(open.total / 20)));
-    const validHistoryPage = Math.min(entries.page, Math.max(1, Math.ceil(entries.total / 20)));
-    if (validBoardPage !== open.page || validHistoryPage !== entries.page) {
-      return loadOperations({ boardPage: validBoardPage, historyPage: validHistoryPage });
+    const openQuery = new URLSearchParams(boardQuery); openQuery.set("view", "open"); openQuery.set("page", boardPage);
+    const [overview, open, entries] = await Promise.all([
+      needsSummary ? api("/operations/summary").then(r => r.json()) : null,
+      needsBoard ? api(`/operations/entries?${openQuery}`).then(r => r.json()) : null,
+      needsHistory ? api(`/operations/entries?${query}`).then(r => r.json()) : null
+    ]);
+    if (!token || identity !== token || version !== operationsVersion) return;
+    const validBoardPage = open ? Math.min(open.page, Math.max(1, Math.ceil(open.total / 20))) : boardPage;
+    const validHistoryPage = entries ? Math.min(entries.page, Math.max(1, Math.ceil(entries.total / 20))) : historyPage;
+    if ((open && validBoardPage !== open.page) || (entries && validHistoryPage !== entries.page)) return loadOperations({ boardPage: validBoardPage, historyPage: validHistoryPage, scope, boardQuery });
+    if (overview) {
+      const changed = JSON.stringify(summary) !== JSON.stringify(overview);
+      summary = overview; equipment = overview.equipment;
+      if (changed) { renderSummary(); renderEquipment(); }
+      workspace.render({ summary, checkedAt: new Date(), stale: false });
     }
-    summary = overview; equipment = overview.equipment; board = open; history = entries;
-    renderSummary(); renderEquipment(); renderEntries(); workspace.render({ summary, checkedAt: new Date(), stale: false });
-  } catch (error) { if (version === operationsVersion) { showError(error); renderEntries(); workspace.render({ stale: true }); } }
-  finally { if (version === operationsVersion) $("refresh-operations").disabled = false; }
+    if (open) { const filtersChanged = boardFilters.toString() !== boardQuery.toString(); boardFilters = new URLSearchParams(boardQuery); const changed = filtersChanged || JSON.stringify(board) !== JSON.stringify(open); board = open; if (changed) renderEntries(); }
+    if (entries) { const changed = JSON.stringify(history) !== JSON.stringify(entries); history = entries; if (changed) renderEntries(); }
+  } catch (error) {
+    if (identity === token && version === operationsVersion) { showError(error); if (needsSummary) workspace.render({ stale: true }); if (needsBoard) for (const name of ["kind", "equipment", "priority"]) $("board-filter").elements.namedItem(name).value = boardFilters.get(name) || ""; }
+  } finally {
+    if (version === operationsVersion) { $("refresh-operations").disabled = false; $("board-apply").disabled = false; $("board-clear").disabled = false; $("board-entries").setAttribute("aria-busy", "false"); updateEntryPagination(); }
+  }
 }
-$("refresh-operations").addEventListener("click", loadOperations);
+function updateEntryPagination() {
+  for (const [state, prefix] of [[board, "board"], [history, "operation"]]) {
+    $(`${prefix}-previous`).disabled = state.page <= 1;
+    $(`${prefix}-next`).disabled = state.page * 20 >= state.total;
+  }
+}
+async function refreshVisible() {
+  if (!token) return;
+  const scope = workspace.page;
+  if (scope === "new-record") return;
+  await Promise.all([loadOperations({ scope }), ...(scope === "history" ? [loadHistory()] : [loadCurrent()])]);
+}
+window.addEventListener("workspacechange", () => { if (token) refreshVisible(); });
+$("refresh-operations").addEventListener("click", () => loadOperations());
 $("overview-refresh").addEventListener("click", async () => {
   $("overview-refresh").disabled = true;
-  try { await Promise.all([loadOperations(), loadCurrent()]); }
+  try { await refreshVisible(); }
   finally { $("overview-refresh").disabled = false; }
 });
 for (const [prefix, isBoard] of [["board", true], ["operation", false]]) for (const direction of ["previous", "next"]) {
   $(`${prefix}-${direction}`).addEventListener("click", async () => {
     const state = isBoard ? board : history, target = Math.max(1, state.page + (direction === "next" ? 1 : -1));
-    await loadOperations(isBoard ? { boardPage: target } : { historyPage: target });
+    await loadOperations(isBoard ? { boardPage: target, scope: "board" } : { historyPage: target, scope: "history" });
   });
 }
 $("equipment-form").addEventListener("submit", async event => {
@@ -246,7 +292,7 @@ $("entry-form").addEventListener("submit", async event => {
   selectedPhotos.forEach(item => body.append("photos", item.file));
   const controls = [...$("entry-form").querySelectorAll("input,select,textarea,button"), ...document.querySelectorAll("[data-quick-kind]")].map(element => ({ element, disabled: element.disabled }));
   entrySending = true; aiAssistant.render(); controls.forEach(({ element }) => { element.disabled = true; }); $("entry-save").textContent = t("saveProgress");
-  try { await api("/operations/entries", { method: "POST", body }); $("entry-form").reset(); board.page = 1; history.page = 1; notify(t("entrySaved")); await loadOperations(); }
+  try { await api("/operations/entries", { method: "POST", body }); $("entry-form").reset(); board.page = 1; history.page = 1; notify(t("entrySaved")); await loadOperations({ scope: workspace.page === "new-record" ? "overview" : workspace.page }); }
   catch (error) { showError(error); }
   finally { entrySending = false; controls.forEach(({ element, disabled }) => { element.disabled = disabled; }); $("entry-save").textContent = t("save"); aiAssistant.render(); }
 });
@@ -258,7 +304,14 @@ $("close-form").addEventListener("submit", async event => {
 });
 document.querySelectorAll("[data-close]").forEach(button => button.addEventListener("click", () => $(button.dataset.close).close()));
 $("photo-dialog").addEventListener("close", releasePhoto);
-setInterval(() => { if (token && document.visibilityState === "visible") Promise.all([loadOperations(), loadCurrent()]); }, 30000);
+let backgroundRefresh = false;
+async function refreshLivePage() {
+  if (!token || backgroundRefresh || document.visibilityState !== "visible" || !["overview", "handover"].includes(workspace.page)) return;
+  backgroundRefresh = true;
+  try { await refreshVisible(); } finally { backgroundRefresh = false; }
+}
+setInterval(refreshLivePage, 30000);
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") refreshLivePage(); });
 window.addEventListener("languagechange", () => { renderAuth(); notify(""); if (token) { renderIdentity(); renderCurrent(); renderRows(); renderSummary(); renderEquipment(); renderEntries(); renderPhotos(); } });
 function renderSummary() {
   if (!summary) {
@@ -281,7 +334,7 @@ $("summary-read").addEventListener("click", async () => {
   if (!summary || summaryBusy) return; summaryBusy = true; renderSummary();
   try { await json("/operations/summary/read", "POST", { revision: summary.revision }); notify(t("summarySaved")); }
   catch (error) { showError(error); }
-  finally { summaryBusy = false; if (token) await loadOperations(); }
+  finally { summaryBusy = false; renderSummary(); if (token) await loadOperations(); }
 });
 function draftDirty() { return Boolean($("entry-title").value.trim() || $("entry-description").value.trim() || selectedPhotos.length); }
 function renderPhotos() {
@@ -305,7 +358,7 @@ $("choose-photos").addEventListener("click", () => $("entry-photos").click());
 $("take-photo").addEventListener("click", () => $("camera-photo").click());
 $("entry-form").addEventListener("input", () => { $("draft-hint").hidden = !draftDirty(); });
 $("entry-form").addEventListener("reset", () => { selectedPhotos.forEach(item => URL.revokeObjectURL(item.url)); selectedPhotos = []; queueMicrotask(renderPhotos); });
-window.addEventListener("beforeunload", event => { if (draftDirty() || aiAssistant.dirty() || interruptedDraft) { event.preventDefault(); event.returnValue = ""; } });
+window.addEventListener("beforeunload", event => { if (draftDirty() || aiAssistant.dirty() || progressNotes.dirty() || interruptedDraft) { event.preventDefault(); event.returnValue = ""; } });
 document.querySelectorAll("[data-quick-kind]").forEach(button => button.addEventListener("click", () => {
   if (entrySending) return;
   $("entry-kind").value = button.dataset.quickKind;
@@ -321,3 +374,12 @@ $("operations-filter").addEventListener("submit", async event => {
 });
 $("operations-clear").addEventListener("click", async () => { $("operations-filter").reset(); operationFilters = new URLSearchParams(); history.page = 1; await loadOperations(); });
 initializeLanguage(); workspace.start(); renderAuth(); renderPhotos();
+
+$("board-filter").addEventListener("submit", async event => {
+  event.preventDefault(); const filters = new URLSearchParams();
+  for (const [key, value] of new FormData($("board-filter"))) if (String(value)) filters.set(key, String(value));
+  await loadOperations({ scope: "board", boardPage: 1, boardQuery: filters });
+});
+$("board-clear").addEventListener("click", async () => {
+  $("board-filter").reset(); await loadOperations({ scope: "board", boardPage: 1, boardQuery: new URLSearchParams() });
+});

@@ -24,7 +24,7 @@ test("older current-shift responses cannot overwrite newer state", async ({ page
     if (++requests === 1) { await gate; await r.fulfill({ json: { currentShift: null } }); }
     else await r.fulfill({ json: { currentShift: { id: 1, shiftDate: "2026-10-19", scheduledStart: "08:00", scheduledEnd: "16:00", startTime: "2026-10-19T05:00:00Z" } } });
   });
-  await login(page); await navigate(page, "handover"); await page.locator("#shift-button").click();
+  await login(page); await navigate(page, "handover");
   await expect(page.locator("#shift-badge")).toHaveText("Vardiya aktif");
   release(); await expect(page.locator("#login-button")).toBeEnabled();
   await expect(page.locator("#shift-badge")).toHaveText("Vardiya aktif");
@@ -60,7 +60,7 @@ test("failed page requests retain the displayed page and its rows", async ({ pag
 
 test("failed closure retains the open dialog and operator note", async ({ page }) => {
   await setup(page); await page.route("**/operations/entries/1/close", r => r.fulfill({ status: 503, json: { error: "Temporary failure" } }));
-  await login(page); await navigate(page, "handover"); await page.locator("#board-entries button").click();
+  await login(page); await navigate(page, "handover"); await page.locator("#board-entries").getByRole("button", { name: "Kaydı kapat", exact: true }).click();
   await page.locator("#close-note").fill("Important closure explanation"); await page.locator("#close-save").click();
   await expect(page.locator("#close-dialog")).toBeVisible();
   await expect(page.locator("#close-note")).toHaveValue("Important closure explanation");

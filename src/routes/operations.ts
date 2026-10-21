@@ -1,3 +1,4 @@
+import { appendUpdate, listUpdates, updatePreviews, emptyUpdates } from "../services/operation-updates.js";
 import { handoverSummary } from "../services/handover-summary.js";
 import { operationQuery } from "../services/operation-query.js";
 import { Prisma } from "../generated/prisma/client.js";
@@ -31,7 +32,7 @@ export function createOperationsRouter(prisma: PrismaClient) {
   const writeLimit = rateLimit({ windowMs: 15 * 60 * 1000, limit: 60, standardHeaders: "draft-8", legacyHeaders: false,
     message: { error: "Çok fazla deneme. Lütfen daha sonra tekrar deneyin." } });
   router.get("/equipment", async (_req, res) => {
-    res.json({ items: await prisma.equipment.findMany({ orderBy: { code: "asc" }, include: { updatedBy: user } }) });
+    res.json({ items: await prisma.equipment.findMany({ where: { code: { in: ["GT1", "GT2", "ST"] } }, orderBy: { code: "asc" }, include: { updatedBy: user } }) });
   });
   router.put("/equipment/:code", writeLimit, async (req, res) => {
     const { status, version } = req.body ?? {};
@@ -56,7 +57,8 @@ export function createOperationsRouter(prisma: PrismaClient) {
       prisma.operationEntry.findMany({ where, select: entrySelect, take: 20, skip: (Number(page) - 1) * 20, orderBy: view === "open" ? [{ priority: "desc" }, { createdAt: "desc" }, { id: "desc" }] : [{ createdAt: "desc" }, { id: "desc" }] }),
       prisma.operationEntry.count({ where })
     ]);
-    res.json({ items, total, page: Number(page), pageSize: 20 });
+    const previews = await updatePreviews(prisma, items.map(item => item.id));
+    res.json({ items: items.map(item => ({ ...item, ...(previews.get(item.id) ?? emptyUpdates) })), total, page: Number(page), pageSize: 20 });
   });
   router.post("/entries", writeLimit, uploads.array("photos", 3), async (req, res) => {
     const { kind, priority = "NORMAL" } = req.body ?? {};
@@ -82,6 +84,19 @@ export function createOperationsRouter(prisma: PrismaClient) {
         ...(shift ? { shiftId: shift.id } : {}), photos: { create: photos } }, select: entrySelect });
     });
     res.status(201).json(entry);
+  });
+  router.get("/entries/:id/updates", async (req, res) => {
+    const entryId = id(req.params.id), page = req.query.page ?? "1";
+    if (Object.keys(req.query).some(key => key !== "page") || typeof page !== "string" || !/^[1-9]\d{0,3}$/.test(page)) throw new RequestError("UPDATE_INVALID_INPUT", 400);
+    res.json(await prisma.$transaction(tx => listUpdates(tx, entryId, Number(page)), { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead }));
+  });
+  router.post("/entries/:id/updates", writeLimit, async (req, res) => {
+    const entryId = id(req.params.id), input = req.body;
+    if (!input || Array.isArray(input) || typeof input !== "object" || Object.keys(input).some(key => !["body", "requestId"].includes(key)) ||
+      typeof input.body !== "string" || !input.body.trim() || input.body.includes("\0") || input.body.length > 2000 || typeof input.requestId !== "string" ||
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(input.requestId)) throw new RequestError("UPDATE_INVALID_INPUT", 400);
+    const result = await appendUpdate(prisma, entryId, req.user!.id, input.body.trim(), input.requestId.toLowerCase());
+    res.status(result.replay ? 200 : 201).json(result.item);
   });
   router.post("/entries/:id/close", writeLimit, async (req, res) => {
     const entryId = id(req.params.id);
