@@ -1,3 +1,4 @@
+import { createProgressNotes } from "./progress-notes.js";
 import { createWorkspace } from "./workspace.js";
 import { createAiAssistant } from "./ai-assistant.js";
 import { t, locale, lang, apiError, initializeLanguage } from "./i18n.js";
@@ -22,6 +23,8 @@ function formats() {
 const localDateFormat = new Intl.DateTimeFormat("sv-SE", { timeZone: "Europe/Istanbul" });
 const localDate = value => localDateFormat.format(new Date(value));
 const stamp = value => { if (!value) return "—"; const date = new Date(value), format = formats(); return `${format.date.format(date)} · ${format.time.format(date)}`; };
+const progressNotes = createProgressNotes({ api, stamp, onSaved: refreshVisible });
+window.addEventListener("entry-updates-open", event => progressNotes.open(event.detail, { readOnly: true }));
 const workspace = createWorkspace({ authenticated: () => Boolean(token), stamp });
 function node(tag, text, className) { const el = document.createElement(tag); if (text !== undefined) el.textContent = text; if (className) el.className = className; return el; }
 function notify(message, error = false) { const el = token ? $("dashboard-message") : $("auth-message"); el.textContent = message; el.classList.toggle("error", error); }
@@ -29,11 +32,11 @@ function showError(error) { if (error.name !== "AbortError") notify(error.messag
 async function failure(response) { try { return apiError((await response.json()).error) || t("failed"); } catch { return t("failed"); } }
 function releasePhoto() { if (photoUrl) URL.revokeObjectURL(photoUrl); photoUrl = null; $("entry-photo").removeAttribute("src"); }
 function logout({ preserveDraft = false } = {}) {
-  if (preserveDraft && user && (draftDirty() || aiAssistant.dirty())) interruptedDraft = { ownerId: user.id,
+  if (preserveDraft && user && (draftDirty() || aiAssistant.dirty() || progressNotes.dirty())) interruptedDraft = { ownerId: user.id,
     values: Object.fromEntries(["entry-kind", "entry-priority", "entry-unit", "entry-title", "entry-description"].map(id => [id, $(id).value])),
-    files: selectedPhotos.map(item => item.file), chat: aiAssistant.snapshot() };
+    files: selectedPhotos.map(item => item.file), chat: aiAssistant.snapshot(), updates: progressNotes.snapshot() };
   if (!preserveDraft) interruptedDraft = null;
-  aiAssistant.reset(); workspace.reset();
+  aiAssistant.reset(); progressNotes.reset(); workspace.reset();
   summary = null; renderSummary(); operationFilters = new URLSearchParams(); boardFilters = new URLSearchParams();
   session.abort(); session = new AbortController(); token = null; user = null; current = undefined; listVersion++; currentVersion++; operationsVersion++;
   document.querySelectorAll("dialog[open]").forEach(dialog => dialog.close()); releasePhoto();
@@ -50,7 +53,7 @@ async function api(path, options = {}) {
   try { response = await fetch(path, { ...options, signal: session.signal, headers: { "Accept-Language": lang(), ...options.headers, Authorization: `Bearer ${token}` } }); }
   catch (error) { if (error.name === "AbortError") throw error; throw new Error(t("connection")); }
   if (identity !== token) throw new DOMException("Session changed", "AbortError");
-  if (response.status === 401) { const unsaved = draftDirty() || aiAssistant.dirty(); logout({ preserveDraft: true }); const message = t(unsaved ? "expiredDraft" : "expired"); notify(message, true); throw new Error(message); }
+  if (response.status === 401) { const unsaved = draftDirty() || aiAssistant.dirty() || progressNotes.dirty(); logout({ preserveDraft: true }); const message = t(unsaved ? "expiredDraft" : "expired"); notify(message, true); throw new Error(message); }
   if (!response.ok) {
     let code; try { code = (await response.clone().json()).error; } catch { /* Non-JSON gateway response. */ }
     const error = new Error(await failure(response));
@@ -89,7 +92,7 @@ $("login-form").addEventListener("submit", async event => {
     if (interruptedDraft) {
       if (interruptedDraft.ownerId === user.id) {
         for (const [id, value] of Object.entries(interruptedDraft.values)) $(id).value = value;
-        addPhotos(interruptedDraft.files); aiAssistant.restore(interruptedDraft.chat); notify(t("draftRestored"));
+        addPhotos(interruptedDraft.files); aiAssistant.restore(interruptedDraft.chat); progressNotes.restore(interruptedDraft.updates); notify(t("draftRestored"));
       }
       interruptedDraft = null;
     }
@@ -97,7 +100,7 @@ $("login-form").addEventListener("submit", async event => {
   } catch (error) { showError(error instanceof TypeError ? new Error(t("connection")) : error); }
   finally { $("login-button").disabled = false; $("switch-auth").disabled = false; }
 });
-$("logout").addEventListener("click", () => { if ((draftDirty() || aiAssistant.dirty() || interruptedDraft) && !confirm(t("discardDraft"))) return; logout(); notify(t("signedOut")); });
+$("logout").addEventListener("click", () => { if ((draftDirty() || aiAssistant.dirty() || progressNotes.dirty() || interruptedDraft) && !confirm(t("discardDraft"))) return; logout(); notify(t("signedOut")); });
 function renderIdentity() {
   if (!user) return;
   $("greeting").textContent = t("greeting", { name: user.name.trim().split(/\s+/)[0] }); $("account-role").textContent = t(user.role);
@@ -193,6 +196,12 @@ function entryCard(item) {
   const meta = node("div", undefined, "entry-meta"); meta.append(node("span", t(item.kind), `entry-kind kind-${item.kind}`), node("span", item.equipmentCode || t("general"), "status")); if (item.priority === "HIGH") meta.append(node("span", t("HIGH"), "priority-high")); if (item.closedAt) meta.append(node("span", t("closed"), "status"));
   card.append(meta, node("h3", item.title), node("p", item.description, "entry-description"), node("p", `${item.author.name} · ${stamp(item.createdAt)}${item.shiftId ? ` · #${item.shiftId}` : ""}`, "hint"));
   const actions = node("div", undefined, "entry-actions");
+  if (["TASK", "VALVE", "ATTENTION"].includes(item.kind)) {
+    const updates = node("button", t("updates", { count: item._count?.updates || 0 }), "button quiet small"); updates.type = "button";
+    updates.dataset.updatesFor = item.id;
+    updates.addEventListener("click", () => progressNotes.open(item)); actions.append(updates);
+    if (item.updates?.[0]) { const last = item.updates[0]; card.append(node("p", t("latestUpdate", { text: last.body }), "latest-update"), node("p", `${last.author.name} · ${stamp(last.createdAt)}`, "hint")); }
+  }
   item.photos.forEach((photo, index) => { const button = node("button", t("viewPhoto", { number: index + 1 }), "button quiet small"); button.type = "button"; button.addEventListener("click", () => viewPhoto(photo.id)); actions.append(button); });
   if (!item.closedAt && ["VALVE", "ATTENTION", "TASK"].includes(item.kind)) {
     const close = node("button", t("closeItem"), "button secondary small"); close.type = "button"; close.addEventListener("click", () => { closingEntry = item.id; $("close-title").textContent = item.title; $("close-note").value = ""; $("close-message").textContent = ""; $("close-dialog").showModal(); }); actions.append(close);
@@ -349,7 +358,7 @@ $("choose-photos").addEventListener("click", () => $("entry-photos").click());
 $("take-photo").addEventListener("click", () => $("camera-photo").click());
 $("entry-form").addEventListener("input", () => { $("draft-hint").hidden = !draftDirty(); });
 $("entry-form").addEventListener("reset", () => { selectedPhotos.forEach(item => URL.revokeObjectURL(item.url)); selectedPhotos = []; queueMicrotask(renderPhotos); });
-window.addEventListener("beforeunload", event => { if (draftDirty() || aiAssistant.dirty() || interruptedDraft) { event.preventDefault(); event.returnValue = ""; } });
+window.addEventListener("beforeunload", event => { if (draftDirty() || aiAssistant.dirty() || progressNotes.dirty() || interruptedDraft) { event.preventDefault(); event.returnValue = ""; } });
 document.querySelectorAll("[data-quick-kind]").forEach(button => button.addEventListener("click", () => {
   if (entrySending) return;
   $("entry-kind").value = button.dataset.quickKind;

@@ -1,4 +1,22 @@
 const messages = {
+  updates:["Gelişmeler ({count})", "Updates ({count})"],
+  updatesTitle:["Gelişmeler · {title}", "Updates · {title}"],
+  updatesHint:["En yeni gelişme en üstte. Notlar tarih ve kişi bilgisiyle bu kayıtta saklanır.", "Newest updates first. Notes stay with this entry, including author and time."],
+  updatesEmpty:["Henüz gelişme notu eklenmemiş.", "No progress notes yet."],
+  updatesClosed:["Bu kayıt kapalı. Geçmişi inceleyebilirsin; yeni not eklenemez.", "This entry is closed. Its history is readable; new notes cannot be added."],
+  updatesReadOnly:["Genel bakışta yalnızca inceleme yapılır. Not eklemek için Devir Panosu’nu aç.", "Overview is read-only. Open Handover to add a note."],
+  updateUnsent:["Kaydedilmemiş taslak. Bu metin henüz gelişme geçmişine eklenmedi.", "Unsent draft. This text has not been added to the progress history."],
+  updateDiscard:["Not taslağını temizle", "Clear note draft"],
+  updateBody:["Gelişme notu", "Progress note"],
+  updateSave:["Gelişme ekle", "Add update"],
+  updatePermanent:["En fazla 2.000 karakter. Kaydedilen gelişmeler düzenlenmez veya silinmez.", "Up to 2,000 characters. Saved updates cannot be edited or deleted."],
+  updateSaved:["Gelişme notu kaydedildi.", "Progress note saved."],
+  latestUpdate:["Son gelişme: {text}", "Latest update: {text}"],
+  UPDATE_INVALID_INPUT:["Gelişme notunu kontrol et (1–2.000 karakter).", "Check the progress note (1–2,000 characters)."],
+  UPDATE_ENTRY_NOT_FOUND:["Kayıt bulunamadı.", "Entry not found."],
+  UPDATE_ENTRY_CLOSED:["Bu kayda not eklenemez. Kapatılmış olabilir; gelişmeleri yenileyerek kontrol et.", "This entry cannot accept updates. It may have been closed; refresh to check."],
+  UPDATE_REQUEST_CONFLICT:["Bu gönderim daha önce farklı bir içerikle kullanılmış. Notu yeniden düzenleyip dene.", "This submission was already used for different content. Edit the note and retry."],
+
   allPriorities:["Tüm önem dereceleri", "All priorities"],
   overviewOpenTitle:["Açık İşler ve Uyarılar", "Open Work & Alerts"],
   overviewOpenHint:["Önemli kayıtlar önce gösterilir. Her kayıt bir kez listelenir; kapatılana kadar vardiyalar arasında görünür kalır.", "Important items appear first. Each entry is listed once and stays visible across shifts until closed."],
@@ -106,7 +124,7 @@ const messages = {
   noOperationResults:["Bu filtrelere uygun kayıt bulunamadı.","No entries match these filters."],
   choosePhotos:["Dosyadan fotoğraf seç","Choose photo files"],
   summary:["Vardiya devralma özeti","Shift handover overview"],summaryHint:["Ünite durumları ve tüm açık kayıtların özeti. Aşağıda en fazla 5 önemli kayıt ve son 5 olay/not listelenir.","Unit status and all open-item counts. Up to 5 important items and 5 recent events/notes are listed below."],summaryOpen:["Açık kayıt","Open items"],summaryImportant:["Önemli uyarı","Important items"],summaryValves:["Aktif vana kaydı","Active valve items"],summaryTasks:["Devam eden iş","Ongoing work"],summaryRecent:["Son olaylar / notlar","Recent events / notes"],summaryRead:["Devir özetini okudum","I have read this handover overview"],summaryReadDone:["Bu özet {date} tarihinde onaylandı.","This overview was acknowledged at {date}."],summaryChanged:["Özet son onayından sonra güncellendi. Yeni bilgileri incele.","The overview has changed since your acknowledgement. Review the new information."],summaryStart:["Devri onaylamak için önce vardiyanı başlat.","Start your shift before acknowledging the overview."],summarySaved:["Devir özeti okuma kaydın saklandı.","Your overview acknowledgement was recorded."],viewBoard:["Tüm açık kayıtlara git","View all open items"],noImportant:["Önemli açık kayıt yok.","No important open items."],summaryLoading:["Devir özeti yükleniyor…","Loading handover overview…"],
-  quickAdd:["Hızlı kayıt","Quick entry"],quickEvent:["Olay ekle","Add event"],quickValve:["Vana kaydı","Valve entry"],quickTask:["Devam eden iş","Ongoing work"],quickAttention:["Dikkat konusu","Attention item"],unit:["İlgili ünite","Related unit"],general:["Genel / ortak","General / shared"],allUnits:["Tüm üniteler","All units"],allKinds:["Tüm kayıt türleri","All entry types"],allStatuses:["Açık ve kapalı","Open and closed"],searchRecords:["Kayıtlarda ara","Search records"],searchText:["Başlık, açıklama veya kapanış notu","Title, description or closing note"],searchHint:["Arama açık ve kapalı tüm kayıtlarda yapılır. Mevcut kayıtlar ünite seçilmemişse Genel olarak görünür.","Search covers open and closed records. Older records without a unit are listed as General."],takePhoto:["Fotoğraf çek","Take photo"],removePhoto:["Fotoğrafı kaldır","Remove photo"],selectedPhotos:["{count}/3 fotoğraf seçildi","{count}/3 photos selected"],draftHint:["Bu kayıt henüz kaydedilmedi.","This entry has not been saved yet."],discardDraft:["Kaydedilmemiş bir kayıt, fotoğraf veya AI sohbeti var. Kaydetmeden çıkmak istiyor musun?","You have an unsaved entry, photo, or AI conversation. Leave without saving?"],draftRestored:["Önceki oturumunda kaydedilmemiş notun geri getirildi. Kontrol edip kaydedebilirsin.","Your unsaved entry from the interrupted session was restored. Review and save it."],expiredDraft:["Oturumun sona erdi. Kaydedilmemiş notun bu sayfada tutuluyor; aynı hesapla giriş yaparak devam edebilirsin.","Your session expired. Your unsaved entry is kept in this page; sign in with the same account to continue."],
+  quickAdd:["Hızlı kayıt","Quick entry"],quickEvent:["Olay ekle","Add event"],quickValve:["Vana kaydı","Valve entry"],quickTask:["Devam eden iş","Ongoing work"],quickAttention:["Dikkat konusu","Attention item"],unit:["İlgili ünite","Related unit"],general:["Genel / ortak","General / shared"],allUnits:["Tüm üniteler","All units"],allKinds:["Tüm kayıt türleri","All entry types"],allStatuses:["Açık ve kapalı","Open and closed"],searchRecords:["Kayıtlarda ara","Search records"],searchText:["Başlık, açıklama veya kapanış notu","Title, description or closing note"],searchHint:["Arama açık ve kapalı tüm kayıtlarda yapılır. Mevcut kayıtlar ünite seçilmemişse Genel olarak görünür.","Search covers open and closed records. Older records without a unit are listed as General."],takePhoto:["Fotoğraf çek","Take photo"],removePhoto:["Fotoğrafı kaldır","Remove photo"],selectedPhotos:["{count}/3 fotoğraf seçildi","{count}/3 photos selected"],draftHint:["Bu kayıt henüz kaydedilmedi.","This entry has not been saved yet."],discardDraft:["Kaydedilmemiş bir kayıt, gelişme notu, fotoğraf veya AI sohbeti var. Kaydetmeden çıkmak istiyor musun?","You have an unsaved entry, progress note, photo, or AI conversation. Leave without saving?"],draftRestored:["Kaydedilmemiş taslakların geri getirildi. İlgili kayıt veya gelişmeler bölümünden devam edebilirsin.","Your unsent drafts were restored. Open the related entry or progress history to review and save them."],expiredDraft:["Oturumun sona erdi. Kaydedilmemiş notun bu sayfada tutuluyor; aynı hesapla giriş yaparak devam edebilirsin.","Your session expired. Your unsaved entry is kept in this page; sign in with the same account to continue."],
 
   chooseLanguage:["Dil seç","Choose language"],darkTheme:["Koyu tema","Dark theme"],
   brand:["Vardiya Defteri","Shift Logbook"], tagline:["VARDİYA VE DEVİR TAKİBİ","SHIFT & HANDOVER TRACKING"],
@@ -143,7 +161,7 @@ export function t(key, vars = {}) {
   for (const [name, text] of Object.entries(vars)) value = value.replaceAll(`{${name}}`, String(text));
   return value;
 }
-export const apiError = message => language === "en" ? errors[message] || t("failed") : message;
+export const apiError = message => messages[message] ? t(message) : language === "en" ? errors[message] || t("failed") : message;
 function apply() {
   document.documentElement.lang = language;
   document.title = t("brand");

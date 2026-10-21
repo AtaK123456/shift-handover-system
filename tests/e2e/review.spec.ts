@@ -60,7 +60,7 @@ test("failed page requests retain the displayed page and its rows", async ({ pag
 
 test("failed closure retains the open dialog and operator note", async ({ page }) => {
   await setup(page); await page.route("**/operations/entries/1/close", r => r.fulfill({ status: 503, json: { error: "Temporary failure" } }));
-  await login(page); await navigate(page, "handover"); await page.locator("#board-entries button").click();
+  await login(page); await navigate(page, "handover"); await page.locator("#board-entries").getByRole("button", { name: "Kaydı kapat", exact: true }).click();
   await page.locator("#close-note").fill("Important closure explanation"); await page.locator("#close-save").click();
   await expect(page.locator("#close-dialog")).toBeVisible();
   await expect(page.locator("#close-note")).toHaveValue("Important closure explanation");
