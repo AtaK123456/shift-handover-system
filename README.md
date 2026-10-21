@@ -516,3 +516,16 @@ The light theme uses layered cool-gray page, card and form-field surfaces instea
 - Live overview/handover refresh runs every 30 seconds only while the tab is visible. Returning to a visible live page triggers a refresh, with overlapping automatic refreshes suppressed.
 - Unchanged overview data preserves card DOM nodes and keyboard focus; unchanged board data skips rebuilding entry cards. Freshness/error status is updated separately. Date/time formatters are reused per language. Photos continue to load only when requested.
 - Server authorization, versioned acknowledgement, closure history and retained compatibility migration are unchanged. No new migration or dependencies are required. No production latency or large-dataset benchmark is claimed.
+
+### Progress notes on open work
+
+Open tasks, valve items and attention items support append-only progress notes (1–2,000 characters). Authenticated plant users can add notes to shared open work; the server sets author and timestamp. Notes never replace the original description or its creation date. Closed work remains readable in history but rejects new notes. There are no note editing or deletion endpoints.
+
+- Overview cards show the latest note. Read-only entry details open the progress history; adding a note stays on Handover or an open-work search result.
+- Progress history loads on demand, newest first, in pages of 20. Entry lists and the handover summary return a count and at most one latest note per entry. A single parameterized query batches those previews, avoiding per-card queries and unbounded note payloads.
+- New notes increment the handover revision and invalidate older acknowledgements. Appends and closures use the same operation-revision lock so a new note cannot be inserted after closure.
+- A per-author request UUID makes retries idempotent, including retrying an already-saved note after closure. Reusing that UUID with another entry or different content is rejected. Failed sends retain text and retry identity. Notes are rendered as text.
+- Unsent note drafts stay in page memory when the dialog closes, with an explicit clear-draft action. Session expiry restores drafts only after signing into the same account. Explicit logout clears them after the existing discard confirmation. Reloading still ends the in-memory session.
+- Both languages and themes are supported. No additional package is required. Before starting this version, run `npx prisma migrate deploy` to apply `20261021000100_operation_updates`. The migration only creates the note table, foreign keys and indexes; it does not rewrite existing records.
+
+API: authenticated `GET /operations/entries/:id/updates?page=1` returns entry state, public note fields, pagination and `canWrite`. `POST` to the same path accepts exactly `{ "body": "…", "requestId": "UUID" }`; a new note returns 201 and an identical retry returns 200. Author IDs, timestamps and other extra input fields are rejected. The existing shared-plant access rules and personal shift/export restrictions remain in effect.

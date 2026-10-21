@@ -36,6 +36,7 @@ model User {
   shifts     Shift[]
   logs       Log[]
   operationEntries OperationEntry[] @relation("EntryAuthor")
+  operationUpdates OperationUpdate[]
   closedEntries OperationEntry[] @relation("EntryCloser")
   equipmentUpdates Equipment[]
   equipmentChanges EquipmentChange[]
@@ -156,6 +157,7 @@ model OperationEntry {
   closedBy User? @relation("EntryCloser", fields: [closedById], references: [id])
   closeNote String?
   photos OperationPhoto[]
+  updates OperationUpdate[]
   equipmentCode String?
   equipment Equipment? @relation(fields: [equipmentCode], references: [code])
   @@index([equipmentCode, createdAt])
@@ -186,4 +188,17 @@ model HandoverRead {
   readAt DateTime @default(now())
   snapshot Json
   @@unique([userId, shiftId, revision])
+}
+
+model OperationUpdate {
+  id Int @id @default(autoincrement())
+  entryId Int
+  entry OperationEntry @relation(fields: [entryId], references: [id], onDelete: Cascade)
+  authorId Int
+  author User @relation(fields: [authorId], references: [id])
+  body String @db.VarChar(2000)
+  requestId String @db.Uuid
+  createdAt DateTime @default(now())
+  @@unique([authorId, requestId])
+  @@index([entryId, createdAt, id])
 }

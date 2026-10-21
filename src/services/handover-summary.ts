@@ -1,3 +1,4 @@
+import { updatePreviews, emptyUpdates } from "./operation-updates.js";
 import type { Prisma } from "../generated/prisma/client.js";
 const preview = { id: true, title: true, description: true, kind: true, priority: true, equipmentCode: true, createdAt: true } as const;
 const boardKinds = ["VALVE", "ATTENTION", "TASK"] as const;
@@ -15,5 +16,7 @@ export async function handoverSummary(tx: Prisma.TransactionClient, userId: numb
   const attention = await tx.operationEntry.findMany({ where: { closedAt: null, kind: "ATTENTION" }, take: 5, orderBy: [{ priority: "desc" }, { createdAt: "desc" }, { id: "desc" }], select: preview });
   const shift = await tx.shift.findFirst({ where: { userId, status: "ACTIVE" }, select: { id: true } });
   const receipt = shift ? await tx.handoverRead.findFirst({ where: { userId, shiftId: shift.id }, orderBy: [{ revision: "desc" }, { id: "desc" }], select: { id: true, revision: true, readAt: true } }) : null;
-  return { revision: revision.version, equipment, counts, important, openItems, recent, tasks, valves, attention, activeShiftId: shift?.id ?? null, receipt };
+  const previews = await updatePreviews(tx, [...important, ...openItems, ...recent, ...tasks, ...valves, ...attention].map(item => item.id));
+  const enrich = (items: typeof openItems) => items.map(item => ({ ...item, ...(previews.get(item.id) ?? emptyUpdates) }));
+  return { revision: revision.version, equipment, counts, important: enrich(important), openItems: enrich(openItems), recent: enrich(recent), tasks: enrich(tasks), valves: enrich(valves), attention: enrich(attention), activeShiftId: shift?.id ?? null, receipt };
 }

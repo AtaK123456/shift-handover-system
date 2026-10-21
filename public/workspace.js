@@ -3,7 +3,7 @@ const $ = id => document.getElementById(id);
 const pages = { overview: ["navOverview", "overviewHint"], "new-record": ["navNew", "newRecordHint"], handover: ["navHandover", "handoverPageHint"], history: ["navHistory", "historyPageHint"] };
 const make = (tag, text, className) => { const el = document.createElement(tag); if (text !== undefined) el.textContent = text; if (className) el.className = className; return el; };
 export function createWorkspace({ authenticated, stamp }) {
-  let contentKey = null;
+  let contentKey = null, detailItem = null;
   let selected = "overview", snapshot = { current: undefined, summary: null, checkedAt: null, stale: false, currentStale: false };
   function select(page, focus = true, emit = true) {
     const previous = selected;
@@ -23,7 +23,16 @@ export function createWorkspace({ authenticated, stamp }) {
   // AI remains available on every page; applying suggestions brings the form into view.
   window.addEventListener("ai-entry-applied", () => open("new-record"));
   $("overview-detail-board").addEventListener("click", () => $("overview-dialog").close());
+  $("overview-detail-updates").addEventListener("click", () => {
+    const item = detailItem;
+    if (!item) return;
+    $("overview-dialog").close(); window.dispatchEvent(new CustomEvent("entry-updates-open", { detail: { id: item.id, title: item.title } }));
+  });
   function details(item) {
+    detailItem = { id: item.id, title: item.title };
+    $("overview-detail-updates").hidden = !["TASK", "VALVE", "ATTENTION"].includes(item.kind);
+    $("overview-detail-updates").dataset.entryId = item.id;
+    $("overview-detail-updates").textContent = t("updates", { count: item._count?.updates || 0 });
     $("overview-detail-title").textContent = item.title;
     $("overview-detail-board").href = ["EVENT", "NOTE"].includes(item.kind) ? "#history" : "#handover";
     $("overview-detail-board").dataset.i18n = ["EVENT", "NOTE"].includes(item.kind) ? "openHistory" : "openHandover";
@@ -64,6 +73,7 @@ export function createWorkspace({ authenticated, stamp }) {
         meta.append(make("span", item.equipmentCode || t("general"), "status"), make("span", t(item.kind), `entry-kind kind-${item.kind}`));
         if (item.priority === "HIGH") meta.append(make("span", t("HIGH"), "priority-high"));
         button.append(meta, make("strong", item.title), make("span", item.description || t("viewDetails"), "observation-excerpt"));
+        if (item.updates?.[0]) button.append(make("span", t("latestUpdate", { text: item.updates[0].body }), "latest-update"));
         if (item.createdAt) button.append(make("span", t(recent ? "recentOn" : "openedOn", { date: stamp(item.createdAt) }), "hint"));
         button.addEventListener("click", () => details(item)); return button;
       });
@@ -75,7 +85,7 @@ export function createWorkspace({ authenticated, stamp }) {
   window.addEventListener("languagechange", () => { select(selected, false, false); render(); });
   return { open, render, get page() { return selected; }, start() { select(location.hash.slice(1), false, false); }, reset() {
     history.replaceState(null, "", `${location.pathname}${location.search}#overview`); select("overview", false, false);
-    $("overview-dialog").close();
+    detailItem = null; $("overview-dialog").close(); $("overview-detail-updates").hidden = true; $("overview-detail-updates").textContent = ""; delete $("overview-detail-updates").dataset.entryId;
     for (const id of ["overview-detail-title", "overview-detail-meta", "overview-detail-description"]) $(id).textContent = "";
     snapshot = { current: undefined, summary: null, checkedAt: null, stale: false, currentStale: false }; render();
   } };
