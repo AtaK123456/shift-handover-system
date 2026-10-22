@@ -553,3 +553,11 @@ Authenticated `GET /operations/entries/:id/work?page=1` returns current details,
 Failed edits retain their in-memory draft and original version. Loading current details requires confirmation before discarding an unsent draft; a failed reload retains it. Closing the dialog or paging history preserves it. Session expiry restores drafts only to the same account; explicit logout clears them after the shared discard confirmation. Closed records reject new writes while keeping draft text inspectable. Both languages, themes and mobile layouts are supported. No additional list requests or dependencies are added.
 
 Stop the development server, update main, run `npx prisma migrate deploy`, then `npm run build` and `npm run dev`. Migration `20261022000200_work_details` adds defaulted work columns and an indexed snapshot table, retaining existing records and closure data.
+
+### Phone usability
+
+Phone layouts use at least 44px action targets and 16px form text, including password visibility, language/theme controls, filters, pagination and record actions. Narrow forms stack their fields; action buttons use a two-column grid. The overview's unit cards use readable rows. Compact landscape phones keep bottom navigation rather than the desktop sidebar. Existing colors, page structure and record workflows are retained.
+
+Mobile dialogs scroll within the visible viewport and keep header close buttons available. A small `visualViewport` helper updates their available height when the keyboard changes the visible area. While a text field is focused and the visible area shrinks substantially, floating navigation and the AI launcher are hidden; the open AI chat adjusts above the keyboard. Controls return when the keyboard closes. No form reset, draft persistence or API behavior is changed. Updates are grouped with animation frames, and pinch zoom is preserved. Browsers without `visualViewport` use ordinary responsive layout and window dimensions.
+
+The viewport includes safe-area support without disabling user zoom. Browser checks cover 320–430px portrait widths, compact landscape, Turkish/English, light/dark, simulated keyboard viewport changes, draft retention and the missing-API fallback. These checks emulate browser geometry rather than operating a physical Android or iOS keyboard. No dependency or migration is required.

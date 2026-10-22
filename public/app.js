@@ -1,3 +1,4 @@
+import "./mobile-layout.js";
 import { createWorkDetails, workStatus } from "./work-details.js";
 import { createProgressNotes } from "./progress-notes.js";
 import { createWorkspace } from "./workspace.js";
