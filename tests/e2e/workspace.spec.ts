@@ -5,7 +5,17 @@ const record = (id: number, kind: string, title: string) => ({ id, kind, title, 
 const task = record(1, "TASK", "GT1 titreşim kontrolü"), valve = { ...record(2, "VALVE", "V-102 aktif vana"), priority: "NORMAL" };
 const equipment = ["GT1", "GT2", "ST"].map((code, i) => ({ code, status: i === 0 ? "ACTIVE" : i === 1 ? "INACTIVE" : "MAINTENANCE", note: i ? "Planlı duruş" : "Bakım kontrolü bekleniyor", updatedAt: "2026-10-20T06:00:00Z", updatedBy: { name: "Operatör" }, version: 1 }));
 const attention = { ...record(4, "ATTENTION", "ST yağ seviyesi takip edilecek"), equipmentCode: "ST", priority: "NORMAL" };
-const summary = { revision: 1, equipment, counts: { total: 8, important: 1, VALVE: 1, ATTENTION: 1, TASK: 6 }, openItems: [task, valve, attention], attention: [attention], important: [task], tasks: [task], valves: [valve], recent: [{ ...record(3, "NOTE", "Vardiya gözlemi"), priority: "NORMAL" }], activeShiftId: null, receipt: null };
+const changes = {
+  shiftDate: "2026-10-22", scheduledStart: "08:00", scheduledEnd: "16:00", since: "2026-10-22T05:00:00Z",
+  counts: { NEW_ENTRY: 1, CLOSED_ENTRY: 1, PROGRESS: 20, EQUIPMENT: 1 }, total: 23,
+  items: [
+    { type: "EQUIPMENT", id: 10, entryId: null, title: "GT1", body: "Bakım kontrolü", equipmentCode: "GT1", fromStatus: "ACTIVE", toStatus: "MAINTENANCE", actorName: "Ece Kaya", createdAt: "2026-10-22T06:04:00Z" },
+    { type: "PROGRESS", id: 11, entryId: 1, kind: "TASK", title: task.title, body: "<img src=x onerror=alert(1)> Ölçüm bekleniyor", equipmentCode: "GT1", actorName: "Deniz Yılmaz", createdAt: "2026-10-22T06:03:00Z" },
+    { type: "CLOSED_ENTRY", id: 12, entryId: 12, kind: "VALVE", title: "V-103 kontrolü", body: "Kontrol tamamlandı", equipmentCode: "GT2", actorName: "Ece Kaya", createdAt: "2026-10-22T06:02:00Z" },
+    { type: "NEW_ENTRY", id: 1, entryId: 1, kind: "TASK", title: task.title, body: task.description, equipmentCode: "GT1", actorName: "Deniz Yılmaz", createdAt: "2026-10-22T06:01:00Z" }
+  ]
+};
+const summary = { changes, revision: 1, equipment, counts: { total: 8, important: 1, VALVE: 1, ATTENTION: 1, TASK: 6 }, openItems: [task, valve, attention], attention: [attention], important: [task], tasks: [task], valves: [valve], recent: [{ ...record(3, "NOTE", "Vardiya gözlemi"), priority: "NORMAL" }], activeShiftId: null, receipt: null };
 async function login(page: Page, role = "WORKER") {
   await page.route("**/login", r => r.fulfill({ json: { token: "workspace-test", user: { id: 1, name: "Deniz Yılmaz", role } } }));
   await page.route("**/ai/status", r => r.fulfill({ json: { enabled: false } }));
@@ -222,4 +232,70 @@ test("handover filters cover the full list and persist through pagination, navig
     await expect(page.locator("#board-apply")).toBeVisible();
   }
   await page.screenshot({ path: "../clear-handover-mobile.png", fullPage: true });
+});
+
+test("shift activity shows counts and safe read-only details in both languages, with mobile layout and stable refresh", async ({ page }) => {
+  const errors: string[] = [], writes: string[] = [];
+  page.on("pageerror", e => errors.push(e.message));
+  page.on("request", r => { if (r.method() === "POST" && !r.url().endsWith("/login")) writes.push(r.url()); });
+  await login(page);
+  await expect(page.locator("#changes-window")).toContainText("2026-10-22 · 08:00–16:00");
+  await expect(page.locator("#changes-counts dd")).toHaveText(["1", "1", "20", "1"]);
+  await expect(page.locator("#changes-preview")).toContainText("23 hareket var; son 4");
+  await expect(page.locator("#changes-list")).toContainText("Devrede → Bakımda");
+  await expect(page.locator("#changes-list img")).toHaveCount(0);
+  await page.locator('#changes-list [data-change-type="EQUIPMENT"]').click();
+  await expect(page.locator("#overview-detail-description")).toContainText("Devrede → Bakımda · Bakım kontrolü");
+  await expect(page.locator("#overview-detail-meta")).toContainText("Ece Kaya");
+  await expect(page.locator("#overview-detail-updates")).toBeHidden();
+  await page.keyboard.press("Escape");
+  await page.locator('#changes-list [data-change-type="CLOSED_ENTRY"]').click();
+  await expect(page.locator("#overview-detail-description")).toHaveText("Kontrol tamamlandı");
+  await expect(page.locator("#overview-detail-board")).toHaveAttribute("href", "#history");
+  await page.keyboard.press("Escape");
+  await page.route(/\/operations\/entries\/1\/updates\?/, r => r.fulfill({ json: { entry: { id: 1, title: task.title, kind: "TASK", closedAt: null }, items: [], total: 0, page: 1, pageSize: 20, canWrite: true } }));
+  await page.locator('#changes-list [data-change-type="PROGRESS"]').click();
+  await expect(page.locator("#overview-detail-description")).toContainText("<img src=x");
+  await expect(page.locator("#overview-detail-description img")).toHaveCount(0);
+  await page.locator("#overview-detail-updates").click();
+  await expect(page.locator("#updates-dialog")).toBeVisible(); await expect(page.locator("#updates-form")).toBeHidden();
+  await expect(page.locator("#updates-mode")).toContainText("Genel bakışta yalnızca inceleme");
+  await page.locator("#updates-close").click();
+  await page.locator("#changes-list button").first().evaluate(el => { (window as any).changeCard = el; (el as HTMLElement).focus(); });
+  await page.locator("#overview-refresh").evaluate(el => (el as HTMLButtonElement).click());
+  await expect(page.locator("#overview-refresh")).toBeEnabled();
+  expect(await page.locator("#changes-list button").first().evaluate(el => el === (window as any).changeCard)).toBe(true);
+  await expect(page.locator("#changes-list button").first()).toBeFocused();
+  await page.locator("#dashboard [data-language]").selectOption("en");
+  await expect(page.locator("#changes-title")).toHaveText("What changed this shift?");
+  await expect(page.locator("#changes-list")).toContainText("In service → Under maintenance");
+  for (const theme of ["light", "dark"]) {
+    if (await page.locator("html").getAttribute("data-theme") !== theme) await page.locator("#dashboard [data-theme-toggle]").click();
+    for (const width of [320, 390]) {
+      await page.setViewportSize({ width, height: 844 });
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    }
+  }
+  await page.screenshot({ path: "../shift-changes-mobile.png", fullPage: true });
+  expect(errors).toEqual([]); expect(writes).toEqual([]);
+});
+
+test("shift activity keeps stale data on failure, rolls over without dropping old open work, and clears on logout", async ({ page }) => {
+  await login(page);
+  await page.route("**/operations/summary", r => r.fulfill({ status: 503, json: { error: "Unavailable" } }));
+  await page.locator("#overview-refresh").click();
+  await expect(page.locator("#overview-updated")).toContainText("güncel olmayabilir");
+  await expect(page.locator("#changes-counts dd")).toHaveText(["1", "1", "20", "1"]);
+  await page.locator("#overview-important button").first().evaluate(el => { (window as any).openCardBeforeRollover = el; });
+  await page.route("**/operations/summary", r => r.fulfill({ json: { ...summary, changes: { ...changes, scheduledStart: "16:00", scheduledEnd: "00:00", counts: { NEW_ENTRY: 0, CLOSED_ENTRY: 0, PROGRESS: 0, EQUIPMENT: 0 }, items: [], total: 0 } } }));
+  await page.locator("#overview-refresh").click();
+  await expect(page.locator("#changes-window")).toContainText("16:00–00:00");
+  expect(await page.locator("#overview-important button").first().evaluate(el => el === (window as any).openCardBeforeRollover)).toBe(true);
+  await expect(page.locator("#changes-counts dd")).toHaveText(["0", "0", "0", "0"]);
+  await expect(page.locator("#changes-list")).toContainText("henüz değişiklik kaydedilmedi");
+  await expect(page.locator("#overview-important")).toContainText(task.title);
+  await expect(page.locator("#changes-preview")).toBeEmpty();
+  await page.locator("#logout").click();
+  await expect(page.locator("#changes-counts")).toBeEmpty(); await expect(page.locator("#changes-list button")).toHaveCount(0);
+  await expect(page.locator("#changes-window")).toBeEmpty();
 });

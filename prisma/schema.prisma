@@ -139,6 +139,7 @@ model EquipmentChange {
   userId Int
   user User @relation(fields: [userId], references: [id])
   createdAt DateTime @default(now())
+  @@index([createdAt, id])
 }
 
 model OperationEntry {
@@ -160,6 +161,8 @@ model OperationEntry {
   updates OperationUpdate[]
   equipmentCode String?
   equipment Equipment? @relation(fields: [equipmentCode], references: [code])
+  @@index([createdAt, id])
+  @@index([closedAt, id])
   @@index([equipmentCode, createdAt])
   @@index([closedAt, kind, createdAt])
 }
@@ -199,6 +202,7 @@ model OperationUpdate {
   body String @db.VarChar(2000)
   requestId String @db.Uuid
   createdAt DateTime @default(now())
+  @@index([createdAt, id])
   @@unique([authorId, requestId])
   @@index([entryId, createdAt, id])
 }

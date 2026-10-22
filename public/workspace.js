@@ -3,7 +3,7 @@ const $ = id => document.getElementById(id);
 const pages = { overview: ["navOverview", "overviewHint"], "new-record": ["navNew", "newRecordHint"], handover: ["navHandover", "handoverPageHint"], history: ["navHistory", "historyPageHint"] };
 const make = (tag, text, className) => { const el = document.createElement(tag); if (text !== undefined) el.textContent = text; if (className) el.className = className; return el; };
 export function createWorkspace({ authenticated, stamp }) {
-  let contentKey = null, detailItem = null;
+  let contentKey = null, changesKey = null, detailItem = null;
   let selected = "overview", snapshot = { current: undefined, summary: null, checkedAt: null, stale: false, currentStale: false };
   function select(page, focus = true, emit = true) {
     const previous = selected;
@@ -41,6 +41,48 @@ export function createWorkspace({ authenticated, stamp }) {
     $("overview-detail-description").textContent = item.description || t("detailsInHandover");
     $("overview-dialog").showModal();
   }
+  const changeLabels = { NEW_ENTRY: "changeNew", CLOSED_ENTRY: "changeClosed", PROGRESS: "changeProgress", EQUIPMENT: "changeEquipment" };
+  function changeText(item) {
+    if (item.type !== "EQUIPMENT") return item.body || t("changeNoNote");
+    const status = item.fromStatus === item.toStatus ? t("changeEquipmentNote") : t("changeStatus", { from: t(item.fromStatus), to: t(item.toStatus) });
+    return `${status}${item.body ? ` · ${item.body}` : ""}`;
+  }
+  function changeDetails(item) {
+    detailItem = item.entryId ? { id: item.entryId, title: item.title } : null;
+    $("overview-detail-updates").hidden = !item.entryId;
+    $("overview-detail-updates").textContent = t("viewUpdates");
+    if (item.entryId) $("overview-detail-updates").dataset.entryId = item.entryId; else delete $("overview-detail-updates").dataset.entryId;
+    $("overview-detail-title").textContent = item.title;
+    $("overview-detail-meta").textContent = `${t(changeLabels[item.type])} · ${item.actorName || t("unspecified")} · ${stamp(item.createdAt)}`;
+    $("overview-detail-description").textContent = changeText(item);
+    const history = item.type === "CLOSED_ENTRY";
+    $("overview-detail-board").href = history ? "#history" : "#handover";
+    $("overview-detail-board").dataset.i18n = history ? "openHistory" : "openHandover";
+    $("overview-detail-board").textContent = t($("overview-detail-board").dataset.i18n);
+    $("overview-dialog").showModal();
+  }
+  function renderChanges(changes) {
+    const key = JSON.stringify([t("changesTitle"), changes]);
+    if (key === changesKey) return;
+    changesKey = key;
+    $("changes-window").textContent = changes ? t("changesWindow", { date: changes.shiftDate, start: changes.scheduledStart, end: changes.scheduledEnd }) : "";
+    $("changes-counts").replaceChildren(...(changes ? Object.entries(changeLabels).map(([type, label]) => {
+      const group = make("div"); group.dataset.changeType = type;
+      group.append(make("dt", t(label)), make("dd", String(changes.counts[type]))); return group;
+    }) : []));
+    const children = (changes?.items || []).map(item => {
+      const row = make("li"), button = make("button", undefined, "observation-card change-card");
+      button.type = "button"; button.dataset.changeType = item.type; button.dataset.changeId = item.id;
+      const meta = make("span", undefined, "entry-meta");
+      meta.append(make("span", t(changeLabels[item.type]), "change-label"));
+      if (item.type !== "EQUIPMENT") meta.append(make("span", item.equipmentCode || t("general"), "status"));
+      button.append(meta, make("strong", item.title), make("span", changeText(item), "observation-excerpt"), make("span", `${item.actorName || t("unspecified")} · ${stamp(item.createdAt)}`, "hint"));
+      button.addEventListener("click", () => changeDetails(item)); row.append(button); return row;
+    });
+    if (!children.length) children.push(make("li", t(changes ? "changesEmpty" : "changesUnavailable"), "overview-empty"));
+    $("changes-list").replaceChildren(...children);
+    $("changes-preview").textContent = changes?.total > (changes?.items?.length || 0) ? t("changesPreview", { shown: changes.items.length, total: changes.total }) : "";
+  }
   function render(values = {}) {
     snapshot = { ...snapshot, ...values };
     const { current, summary, checkedAt, stale, currentStale } = snapshot;
@@ -48,6 +90,7 @@ export function createWorkspace({ authenticated, stamp }) {
     $("overview-shift-hours").textContent = current ? `${current.shiftDate} · ${current.scheduledStart}–${current.scheduledEnd}` : t(current === undefined ? "checkHint" : "overviewNoShift");
     $("overview-updated").textContent = stale || currentStale ? t("overviewStale") : checkedAt ? t("overviewUpdated", { date: stamp(checkedAt) }) : t("summaryLoading");
     $("overview-updated").classList.toggle("error", stale || currentStale);
+    renderChanges(summary?.changes);
     // Polls update freshness separately; unchanged data must keep card nodes and keyboard focus.
     const key = JSON.stringify([t("overviewOpenTitle"), summary && [summary.equipment, summary.counts, summary.openItems, summary.recent]]);
     if (key === contentKey) return;

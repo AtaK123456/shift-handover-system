@@ -515,7 +515,7 @@ The light theme uses layered cool-gray page, card and form-field surfaces instea
 - Handover adds the open-board page; history loads shift history and its own entry page. New Entry does not poll operational data. Entering a page refreshes its data, while unsaved form text and photos remain intact.
 - Live overview/handover refresh runs every 30 seconds only while the tab is visible. Returning to a visible live page triggers a refresh, with overlapping automatic refreshes suppressed.
 - Unchanged overview data preserves card DOM nodes and keyboard focus; unchanged board data skips rebuilding entry cards. Freshness/error status is updated separately. Date/time formatters are reused per language. Photos continue to load only when requested.
-- Server authorization, versioned acknowledgement, closure history and retained compatibility migration are unchanged. No new migration or dependencies are required. No production latency or large-dataset benchmark is claimed.
+- Server authorization, versioned acknowledgement, closure history and retained compatibility migration are unchanged. The page-loading changes themselves require no additional migration or dependency. No production latency or large-dataset benchmark is claimed.
 
 ### Progress notes on open work
 
@@ -529,3 +529,13 @@ Open tasks, valve items and attention items support append-only progress notes (
 - Both languages and themes are supported. No additional package is required. Before starting this version, run `npx prisma migrate deploy` to apply `20261021000100_operation_updates`. The migration only creates the note table, foreign keys and indexes; it does not rewrite existing records.
 
 API: authenticated `GET /operations/entries/:id/updates?page=1` returns entry state, public note fields, pagination and `canWrite`. `POST` to the same path accepts exactly `{ "body": "…", "requestId": "UUID" }`; a new note returns 201 and an identical retry returns 200. Author IDs, timestamps and other extra input fields are rejected. The existing shared-plant access rules and personal shift/export restrictions remain in effect.
+
+### Changes during the current plant shift
+
+Overview now shows a read-only change preview beneath open work. Its shared window follows the existing Istanbul plant schedule (00:00–08:00, 08:00–16:00, 16:00–00:00), independently of a user's personal active shift. The date and hours are explicit; this is not a comparison against a user's last login or acknowledgment. At each shift boundary the preview starts a new window. Older open work continues to appear above it until closed.
+
+Four exact counts cover newly created board entries (tasks, valves, attention items), closures, progress notes and GT1/GT2/ST status or status-note updates. An entry created and closed during the same shift contributes one creation and one closure. General events and notes retain their separate recent-record list. The latest eight changes are ordered by event time, with stable type/ID tie breakers; a limit notice appears when there are more. Equipment changes include the previous and new status. Same-status saves are identified as status-note updates. Author names and event times accompany changes; clicking opens read-only details. No AI service is needed.
+
+`GET /operations/summary` includes `changes` in its existing repeatable-read transaction. A single parameterized query returns at most eight candidates from each of four sources and exact window counts; the server returns only the latest eight. It does not load photo bytes, credentials or complete progress histories, and adds no frontend requests. Existing stale-data warnings and session clearing apply to the preview. This does not implement a full equipment audit screen; retained equipment history remains in the database.
+
+Before starting the updated server, run `npx prisma migrate deploy` to apply `20261022000100_shift_change_indexes`. This additive migration adds four time/ID indexes and does not modify existing records. No dependency changes are required. Large-table index deployment and production latency have not been benchmarked.
