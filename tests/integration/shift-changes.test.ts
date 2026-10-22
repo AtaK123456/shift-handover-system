@@ -32,7 +32,7 @@ test("shift changes count all four sources, include boundaries and old work upda
       { equipmentCode: "GT1", fromStatus: "MAINTENANCE", toStatus: "MAINTENANCE", note: "Note only", userId: user.id, createdAt: instant("06:00:00.000") }
     ] });
     const first = await read(instant("06:00:00.000"));
-    assert.deepEqual(first.counts, { NEW_ENTRY: 1, CLOSED_ENTRY: 2, PROGRESS: 1, EQUIPMENT: 2 }); assert.equal(first.total, 6);
+    assert.deepEqual(first.counts, { NEW_ENTRY: 1, CLOSED_ENTRY: 2, PROGRESS: 1, EQUIPMENT: 2, WORK_DETAILS: 0 }); assert.equal(first.total, 6);
     assert.equal(first.items[0]!.type, "EQUIPMENT"); assert.equal(first.items[0]!.body, "Note only");
     assert.ok(first.items.some(row => row.type === "NEW_ENTRY" && row.entryId === boundary.id));
     assert.ok(first.items.some(row => row.type === "PROGRESS" && row.entryId === old.id && row.body === "Progress on old work"));
@@ -48,7 +48,7 @@ test("shift changes count all four sources, include boundaries and old work upda
     assert.deepEqual(noteIds, [...noteIds].sort((a, b) => b - a));
     assert.deepEqual((await read(instant("06:00:00.000"))).items, many.items);
     const next = await read(instant("13:00:00.000"));
-    assert.deepEqual(next.counts, { NEW_ENTRY: 1, CLOSED_ENTRY: 0, PROGRESS: 0, EQUIPMENT: 0 });
+    assert.deepEqual(next.counts, { NEW_ENTRY: 1, CLOSED_ENTRY: 0, PROGRESS: 0, EQUIPMENT: 0, WORK_DETAILS: 0 });
     assert.equal(next.items[0]!.title, "Next shift");
     const empty = await read(new Date("2026-10-23T05:00:00Z")); assert.equal(empty.total, 0); assert.deepEqual(empty.items, []);
     const app = createApp(db, secret);

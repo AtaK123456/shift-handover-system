@@ -1,3 +1,4 @@
+import { workSummary, workStatus } from "./work-details.js";
 import { t } from "./i18n.js";
 const $ = id => document.getElementById(id);
 const pages = { overview: ["navOverview", "overviewHint"], "new-record": ["navNew", "newRecordHint"], handover: ["navHandover", "handoverPageHint"], history: ["navHistory", "historyPageHint"] };
@@ -28,8 +29,15 @@ export function createWorkspace({ authenticated, stamp }) {
     if (!item) return;
     $("overview-dialog").close(); window.dispatchEvent(new CustomEvent("entry-updates-open", { detail: { id: item.id, title: item.title } }));
   });
+  $("overview-detail-work").addEventListener("click", () => {
+    if (!detailItem) return;
+    $("overview-dialog").close(); window.dispatchEvent(new CustomEvent("entry-work-open", { detail: detailItem }));
+  });
   function details(item) {
     detailItem = { id: item.id, title: item.title };
+    const board = ["TASK", "VALVE", "ATTENTION"].includes(item.kind);
+    $("overview-detail-work").hidden = !board;
+    $("overview-detail-work-summary").textContent = board ? workSummary(item) : "";
     $("overview-detail-updates").hidden = !["TASK", "VALVE", "ATTENTION"].includes(item.kind);
     $("overview-detail-updates").dataset.entryId = item.id;
     $("overview-detail-updates").textContent = t("updates", { count: item._count?.updates || 0 });
@@ -41,13 +49,16 @@ export function createWorkspace({ authenticated, stamp }) {
     $("overview-detail-description").textContent = item.description || t("detailsInHandover");
     $("overview-dialog").showModal();
   }
-  const changeLabels = { NEW_ENTRY: "changeNew", CLOSED_ENTRY: "changeClosed", PROGRESS: "changeProgress", EQUIPMENT: "changeEquipment" };
+  const changeLabels = { NEW_ENTRY: "changeNew", CLOSED_ENTRY: "changeClosed", PROGRESS: "changeProgress", EQUIPMENT: "changeEquipment", WORK_DETAILS: "changeWork" };
   function changeText(item) {
+    if (item.type === "WORK_DETAILS") return workSummary(item.workDetails);
     if (item.type !== "EQUIPMENT") return item.body || t("changeNoNote");
     const status = item.fromStatus === item.toStatus ? t("changeEquipmentNote") : t("changeStatus", { from: t(item.fromStatus), to: t(item.toStatus) });
     return `${status}${item.body ? ` · ${item.body}` : ""}`;
   }
   function changeDetails(item) {
+    $("overview-detail-work").hidden = !item.entryId;
+    $("overview-detail-work-summary").textContent = "";
     detailItem = item.entryId ? { id: item.entryId, title: item.title } : null;
     $("overview-detail-updates").hidden = !item.entryId;
     $("overview-detail-updates").textContent = t("viewUpdates");
@@ -68,7 +79,7 @@ export function createWorkspace({ authenticated, stamp }) {
     $("changes-window").textContent = changes ? t("changesWindow", { date: changes.shiftDate, start: changes.scheduledStart, end: changes.scheduledEnd }) : "";
     $("changes-counts").replaceChildren(...(changes ? Object.entries(changeLabels).map(([type, label]) => {
       const group = make("div"); group.dataset.changeType = type;
-      group.append(make("dt", t(label)), make("dd", String(changes.counts[type]))); return group;
+      group.append(make("dt", t(label)), make("dd", String(changes.counts[type] || 0))); return group;
     }) : []));
     const children = (changes?.items || []).map(item => {
       const row = make("li"), button = make("button", undefined, "observation-card change-card");
@@ -114,8 +125,10 @@ export function createWorkspace({ authenticated, stamp }) {
         const button = make("button", undefined, `observation-card${item.priority === "HIGH" ? " important" : ""}`); button.type = "button"; button.dataset.entryId = item.id;
         const meta = make("span", undefined, "entry-meta");
         meta.append(make("span", item.equipmentCode || t("general"), "status"), make("span", t(item.kind), `entry-kind kind-${item.kind}`));
+        if (["TASK", "VALVE", "ATTENTION"].includes(item.kind)) meta.append(make("span", t(workStatus(item)), `status work-status work-${item.workStatus || "OPEN"}`));
         if (item.priority === "HIGH") meta.append(make("span", t("HIGH"), "priority-high"));
         button.append(meta, make("strong", item.title), make("span", item.description || t("viewDetails"), "observation-excerpt"));
+        if (item.responsibleTeam || item.nextStep) button.append(make("span", workSummary(item), "observation-excerpt work-preview"));
         if (item.updates?.[0]) button.append(make("span", t("latestUpdate", { text: item.updates[0].body }), "latest-update"));
         if (item.createdAt) button.append(make("span", t(recent ? "recentOn" : "openedOn", { date: stamp(item.createdAt) }), "hint"));
         button.addEventListener("click", () => details(item)); return button;
@@ -128,7 +141,7 @@ export function createWorkspace({ authenticated, stamp }) {
   window.addEventListener("languagechange", () => { select(selected, false, false); render(); });
   return { open, render, get page() { return selected; }, start() { select(location.hash.slice(1), false, false); }, reset() {
     history.replaceState(null, "", `${location.pathname}${location.search}#overview`); select("overview", false, false);
-    detailItem = null; $("overview-dialog").close(); $("overview-detail-updates").hidden = true; $("overview-detail-updates").textContent = ""; delete $("overview-detail-updates").dataset.entryId;
+    detailItem = null; $("overview-detail-work").hidden = true; $("overview-detail-work-summary").textContent = ""; $("overview-dialog").close(); $("overview-detail-updates").hidden = true; $("overview-detail-updates").textContent = ""; delete $("overview-detail-updates").dataset.entryId;
     for (const id of ["overview-detail-title", "overview-detail-meta", "overview-detail-description"]) $(id).textContent = "";
     snapshot = { current: undefined, summary: null, checkedAt: null, stale: false, currentStale: false }; render();
   } };

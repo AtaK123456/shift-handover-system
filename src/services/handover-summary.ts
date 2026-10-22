@@ -1,7 +1,8 @@
+import { workSelect } from "./work-details.js";
 import { shiftChanges } from "./shift-changes.js";
 import { updatePreviews, emptyUpdates } from "./operation-updates.js";
 import type { Prisma } from "../generated/prisma/client.js";
-const preview = { id: true, title: true, description: true, kind: true, priority: true, equipmentCode: true, createdAt: true } as const;
+const preview = { ...workSelect, id: true, title: true, description: true, kind: true, priority: true, equipmentCode: true, createdAt: true } as const;
 const boardKinds = ["VALVE", "ATTENTION", "TASK"] as const;
 export async function handoverSummary(tx: Prisma.TransactionClient, userId: number) {
   const revision = await tx.operationRevision.findUniqueOrThrow({ where: { id: 1 } });

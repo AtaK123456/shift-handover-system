@@ -37,6 +37,7 @@ model User {
   logs       Log[]
   operationEntries OperationEntry[] @relation("EntryAuthor")
   operationUpdates OperationUpdate[]
+  workChanges WorkDetailChange[]
   closedEntries OperationEntry[] @relation("EntryCloser")
   equipmentUpdates Equipment[]
   equipmentChanges EquipmentChange[]
@@ -142,6 +143,12 @@ model EquipmentChange {
   @@index([createdAt, id])
 }
 
+enum WorkStatus {
+  OPEN
+  IN_PROGRESS
+  WAITING
+}
+
 model OperationEntry {
   id Int @id @default(autoincrement())
   kind EntryKind
@@ -159,6 +166,11 @@ model OperationEntry {
   closeNote String?
   photos OperationPhoto[]
   updates OperationUpdate[]
+  workStatus WorkStatus @default(OPEN)
+  responsibleTeam String @default("") @db.VarChar(120)
+  nextStep String @default("") @db.VarChar(1000)
+  workVersion Int @default(0)
+  workChanges WorkDetailChange[]
   equipmentCode String?
   equipment Equipment? @relation(fields: [equipmentCode], references: [code])
   @@index([createdAt, id])
@@ -205,4 +217,20 @@ model OperationUpdate {
   @@index([createdAt, id])
   @@unique([authorId, requestId])
   @@index([entryId, createdAt, id])
+}
+
+model WorkDetailChange {
+  id Int @id @default(autoincrement())
+  entryId Int
+  entry OperationEntry @relation(fields: [entryId], references: [id], onDelete: Cascade)
+  authorId Int
+  author User @relation(fields: [authorId], references: [id])
+  version Int
+  workStatus WorkStatus
+  responsibleTeam String @db.VarChar(120)
+  nextStep String @db.VarChar(1000)
+  createdAt DateTime @default(now())
+  @@unique([entryId, version])
+  @@index([entryId, createdAt, id])
+  @@index([createdAt, id])
 }

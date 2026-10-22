@@ -1,3 +1,4 @@
+import { readWork, writeWork, workSelect, workFields } from "../services/work-details.js";
 import { appendUpdate, listUpdates, updatePreviews, emptyUpdates } from "../services/operation-updates.js";
 import { handoverSummary } from "../services/handover-summary.js";
 import { operationQuery } from "../services/operation-query.js";
@@ -9,7 +10,7 @@ import { rateLimit } from "express-rate-limit";
 import { EntryKind, EntryPriority, EquipmentStatus, type PrismaClient } from "../generated/prisma/client.js";
 import { RequestError } from "../services/shift-query.js";
 const user = { select: { id: true, name: true } } as const;
-const entrySelect = { id: true, kind: true, priority: true, title: true, description: true, createdAt: true,
+const entrySelect = { ...workSelect, id: true, kind: true, priority: true, title: true, description: true, createdAt: true,
   shiftId: true, equipmentCode: true, author: user, closedAt: true, closedBy: user, closeNote: true,
   photos: { select: { id: true } } } as const;
 const boardKinds: EntryKind[] = [EntryKind.VALVE, EntryKind.ATTENTION, EntryKind.TASK];
@@ -23,7 +24,7 @@ function id(value: unknown) {
 }
 export function createOperationsRouter(prisma: PrismaClient) {
   const router = Router();
-  const uploads = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024, files: 3, fields: 5, fieldSize: 16000 },
+  const uploads = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024, files: 3, fields: 8, fieldSize: 16000 },
     fileFilter: (_req, file, done) => {
       if (!["image/jpeg", "image/png", "image/webp"].includes(file.mimetype)) return done(new RequestError("Yalnızca JPEG, PNG veya WebP fotoğraf yükleyin.", 400));
       done(null, true);
@@ -67,6 +68,10 @@ export function createOperationsRouter(prisma: PrismaClient) {
     if (equipmentCode !== null && !["GT1", "GT2", "ST"].includes(equipmentCode)) throw new RequestError("Ekipman durumunu kontrol edin.", 400);
     const title = text(req.body.title, 1, 160);
     const description = text(req.body.description, 1, 4000);
+    const isBoard = boardKinds.includes(kind);
+    const hasWork = ["workStatus", "responsibleTeam", "nextStep"].some(key => req.body[key] !== undefined);
+    if (!isBoard && hasWork) throw new RequestError("WORK_INVALID", 400);
+    const work = workFields(isBoard ? req.body : {});
     const photos: { data: Uint8Array<ArrayBuffer> }[] = [];
     for (const file of (req.files ?? []) as Express.Multer.File[]) {
       try {
@@ -80,10 +85,19 @@ export function createOperationsRouter(prisma: PrismaClient) {
     const entry = await prisma.$transaction(async tx => {
       await tx.operationRevision.update({ where: { id: 1 }, data: { version: { increment: 1 } } });
       const shift = await tx.shift.findFirst({ where: { userId: req.user!.id, status: "ACTIVE" }, select: { id: true } });
-      return tx.operationEntry.create({ data: { kind, priority, title, description, equipmentCode, authorId: req.user!.id,
+      return tx.operationEntry.create({ data: { ...work, kind, priority, title, description, equipmentCode, authorId: req.user!.id,
+        ...(isBoard && hasWork ? { workChanges: { create: { ...work, version: 0, authorId: req.user!.id } } } : {}),
         ...(shift ? { shiftId: shift.id } : {}), photos: { create: photos } }, select: entrySelect });
     });
     res.status(201).json(entry);
+  });
+  router.get("/entries/:id/work", async (req, res) => {
+    const entryId = id(req.params.id), page = req.query.page ?? "1";
+    if (Object.keys(req.query).some(key => key !== "page") || typeof page !== "string" || !/^[1-9]\d{0,3}$/.test(page)) throw new RequestError("WORK_INVALID", 400);
+    res.json(await prisma.$transaction(tx => readWork(tx, entryId, Number(page)), { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead }));
+  });
+  router.patch("/entries/:id/work", writeLimit, async (req, res) => {
+    res.json(await writeWork(prisma, id(req.params.id), req.user!.id, req.body));
   });
   router.get("/entries/:id/updates", async (req, res) => {
     const entryId = id(req.params.id), page = req.query.page ?? "1";

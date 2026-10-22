@@ -7,7 +7,7 @@ const equipment = ["GT1", "GT2", "ST"].map((code, i) => ({ code, status: i === 0
 const attention = { ...record(4, "ATTENTION", "ST yağ seviyesi takip edilecek"), equipmentCode: "ST", priority: "NORMAL" };
 const changes = {
   shiftDate: "2026-10-22", scheduledStart: "08:00", scheduledEnd: "16:00", since: "2026-10-22T05:00:00Z",
-  counts: { NEW_ENTRY: 1, CLOSED_ENTRY: 1, PROGRESS: 20, EQUIPMENT: 1 }, total: 23,
+  counts: { NEW_ENTRY: 1, CLOSED_ENTRY: 1, PROGRESS: 20, EQUIPMENT: 1, WORK_DETAILS: 0 }, total: 23,
   items: [
     { type: "EQUIPMENT", id: 10, entryId: null, title: "GT1", body: "Bakım kontrolü", equipmentCode: "GT1", fromStatus: "ACTIVE", toStatus: "MAINTENANCE", actorName: "Ece Kaya", createdAt: "2026-10-22T06:04:00Z" },
     { type: "PROGRESS", id: 11, entryId: 1, kind: "TASK", title: task.title, body: "<img src=x onerror=alert(1)> Ölçüm bekleniyor", equipmentCode: "GT1", actorName: "Deniz Yılmaz", createdAt: "2026-10-22T06:03:00Z" },
@@ -240,7 +240,7 @@ test("shift activity shows counts and safe read-only details in both languages, 
   page.on("request", r => { if (r.method() === "POST" && !r.url().endsWith("/login")) writes.push(r.url()); });
   await login(page);
   await expect(page.locator("#changes-window")).toContainText("2026-10-22 · 08:00–16:00");
-  await expect(page.locator("#changes-counts dd")).toHaveText(["1", "1", "20", "1"]);
+  await expect(page.locator("#changes-counts dd")).toHaveText(["1", "1", "20", "1", "0"]);
   await expect(page.locator("#changes-preview")).toContainText("23 hareket var; son 4");
   await expect(page.locator("#changes-list")).toContainText("Devrede → Bakımda");
   await expect(page.locator("#changes-list img")).toHaveCount(0);
@@ -285,13 +285,13 @@ test("shift activity keeps stale data on failure, rolls over without dropping ol
   await page.route("**/operations/summary", r => r.fulfill({ status: 503, json: { error: "Unavailable" } }));
   await page.locator("#overview-refresh").click();
   await expect(page.locator("#overview-updated")).toContainText("güncel olmayabilir");
-  await expect(page.locator("#changes-counts dd")).toHaveText(["1", "1", "20", "1"]);
+  await expect(page.locator("#changes-counts dd")).toHaveText(["1", "1", "20", "1", "0"]);
   await page.locator("#overview-important button").first().evaluate(el => { (window as any).openCardBeforeRollover = el; });
-  await page.route("**/operations/summary", r => r.fulfill({ json: { ...summary, changes: { ...changes, scheduledStart: "16:00", scheduledEnd: "00:00", counts: { NEW_ENTRY: 0, CLOSED_ENTRY: 0, PROGRESS: 0, EQUIPMENT: 0 }, items: [], total: 0 } } }));
+  await page.route("**/operations/summary", r => r.fulfill({ json: { ...summary, changes: { ...changes, scheduledStart: "16:00", scheduledEnd: "00:00", counts: { NEW_ENTRY: 0, CLOSED_ENTRY: 0, PROGRESS: 0, EQUIPMENT: 0, WORK_DETAILS: 0 }, items: [], total: 0 } } }));
   await page.locator("#overview-refresh").click();
   await expect(page.locator("#changes-window")).toContainText("16:00–00:00");
   expect(await page.locator("#overview-important button").first().evaluate(el => el === (window as any).openCardBeforeRollover)).toBe(true);
-  await expect(page.locator("#changes-counts dd")).toHaveText(["0", "0", "0", "0"]);
+  await expect(page.locator("#changes-counts dd")).toHaveText(["0", "0", "0", "0", "0"]);
   await expect(page.locator("#changes-list")).toContainText("henüz değişiklik kaydedilmedi");
   await expect(page.locator("#overview-important")).toContainText(task.title);
   await expect(page.locator("#changes-preview")).toBeEmpty();

@@ -198,3 +198,9 @@ td{font-size:13px}th{font-size:11px}.date-cell small{font-size:11px;color:#71806
 .changes-list{list-style:none;padding:0;margin:0;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.changes-list>li{min-width:0}
 .change-card{height:100%;padding:12px}.change-label{color:var(--accent-ink);font-weight:600}.change-card[data-change-type=CLOSED_ENTRY] .change-label{color:var(--positive)}.change-card[data-change-type=PROGRESS] .change-label{color:var(--work-ink)}.change-card[data-change-type=EQUIPMENT] .change-label{color:var(--warning)}
 @media(max-width:700px){.changes-counts{grid-template-columns:repeat(2,minmax(0,1fr))}.changes-list{grid-template-columns:1fr}}
+
+.work-fields{border:1px solid var(--line);border-radius:10px;padding:14px;margin:18px 0}.work-fields legend{font-weight:600;padding:0 6px}
+.work-next,.work-team{font-size:14px;white-space:pre-wrap;overflow-wrap:anywhere}.work-preview{color:var(--muted)}
+:root[data-theme] .work-IN_PROGRESS{background:var(--accent-soft);color:var(--accent-ink)}:root[data-theme] .work-WAITING{background:var(--warning-bg);color:var(--warning)}:root[data-theme] .work-CLOSED{background:var(--positive-bg);color:var(--positive)}
+#work-dialog{width:min(620px,calc(100% - 28px));max-height:88dvh;overflow:auto}#work-history{margin-top:12px}#work-dialog .dialog-actions{flex-wrap:wrap}.changes-counts{grid-template-columns:repeat(5,minmax(0,1fr))}
+@media(max-width:700px){.changes-counts{grid-template-columns:repeat(2,minmax(0,1fr))}}
