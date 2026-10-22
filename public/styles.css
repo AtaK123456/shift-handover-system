@@ -92,6 +92,12 @@ td{font-size:13px}th{font-size:11px}.date-cell small{font-size:11px;color:#71806
 .workspace-nav a svg{width:21px;height:21px;flex-shrink:0}.workspace-nav a:hover{background:#f0f4ed;color:var(--accent-color)}.workspace-nav a[aria-current=page]{background:#e4eee6;color:#174c43}
 .workspace{margin-left:240px;margin-right:auto;max-width:1300px;padding:34px 30px 24px;min-width:0}.welcome{align-items:flex-start}.welcome h1{font-size:30px;margin:7px 0 9px}.welcome .eyebrow{color:var(--muted);letter-spacing:.08em}.welcome .muted{max-width:650px;font-size:13px}
 [data-page]{min-width:0}[data-page="new-record"]>.panel{max-width:760px;margin:0 auto}[data-page="handover"]>.panel{margin-top:22px}
+/* Animate only the incoming page; navigation and data loading stay immediate. */
+@media(prefers-reduced-motion:no-preference){
+  [data-page]:not([hidden]){animation:workspace-enter .2s ease-out}
+  .workspace-nav a{transition:background-color .15s,color .15s}
+}
+@keyframes workspace-enter{from{opacity:.75;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
 .overview-topline{display:flex;justify-content:space-between;align-items:center;gap:15px;margin-bottom:16px}.overview-topline .hint{margin:0}.overview-topline .error{color:#a33333}
 .overview-shift{display:flex;align-items:center;justify-content:space-between;gap:20px;margin-bottom:22px}.overview-shift h2{font-size:21px;margin:8px 0}.overview-shift .muted{font-size:13px}
 .overview-panel{margin:22px 0}.overview-alerts{border-top:3px solid #be8739}.overview-list{display:grid;gap:10px}.observation-card{display:flex;flex-direction:column;gap:7px;text-align:left;width:100%;border:1px solid var(--line);border-radius:9px;padding:15px;background:transparent;color:inherit;font:inherit;min-width:0;overflow-wrap:anywhere}

@@ -554,6 +554,10 @@ Failed edits retain their in-memory draft and original version. Loading current 
 
 Stop the development server, update main, run `npx prisma migrate deploy`, then `npm run build` and `npm run dev`. Migration `20261022000200_work_details` adds defaulted work columns and an indexed snapshot table, retaining existing records and closure data.
 
+### Page transitions
+
+Opening a workspace page uses a subtle 200ms fade and 6px slide. Navigation, focus and data loading remain immediate, and drafts stay in place. The CSS effect animates only opacity and transform, adds no dependencies or requests, and is disabled when the system requests reduced motion.
+
 ### Phone usability
 
 Phone layouts use at least 44px action targets and 16px form text, including password visibility, language/theme controls, filters, pagination and record actions. Narrow forms stack their fields; action buttons use a two-column grid. The overview's unit cards use readable rows. Compact landscape phones keep bottom navigation rather than the desktop sidebar. Existing colors, page structure and record workflows are retained.
