@@ -4,6 +4,7 @@ import type { Analyzer } from "./services/ai-analysis.js";
 import { shiftSchedule } from "./services/schedule.js";
 import multer from "multer";
 import { fileURLToPath } from "node:url";
+import { createHash, timingSafeEqual } from "node:crypto";
 import { createShiftWorkbook, MAX_EXPORT_ROWS } from "./services/export.service.js";
 import { shiftFilter, RequestError } from "./services/shift-query.js";
 import express, { type ErrorRequestHandler } from "express";
@@ -26,8 +27,9 @@ function credentials(body: unknown, registration = false) {
   return { email, password, name: typeof name === "string" ? name.trim() : "" };
 }
 
-export function createApp(prisma: PrismaClient, secret: string, options: { analyzer?: Analyzer | null } = {}) {
+export function createApp(prisma: PrismaClient, secret: string, options: { analyzer?: Analyzer | null; registrationCode?: string | null } = {}) {
   const app = express();
+  const registrationHash = options.registrationCode ? createHash("sha256").update(options.registrationCode).digest() : null;
   const authenticate = authenticateToken(prisma, secret);
   const shifts = createShiftService(prisma);
   app.disable("x-powered-by");
@@ -52,6 +54,12 @@ export function createApp(prisma: PrismaClient, secret: string, options: { analy
     res.json(users);
   });
   app.post("/register", limiter(10), async (req, res) => {
+    if (!registrationHash) return res.status(403).json({ error: "Kayıt kapalı." });
+    const code: unknown = req.body?.registrationCode;
+    if (typeof code !== "string" || code.length > 128 ||
+        !timingSafeEqual(createHash("sha256").update(code).digest(), registrationHash)) {
+      return res.status(403).json({ error: "Kayıt yapılamadı. Bilgileri kontrol edin veya ekip sorumlusuyla iletişime geçin." });
+    }
     const input = credentials(req.body, true);
     if (!input) return res.status(400).json({ error: "Geçerli e-posta, isim (1–100 karakter) ve şifre (en az 12 karakter, en çok 256 bayt) gerekli." });
     try {

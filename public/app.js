@@ -74,6 +74,8 @@ function passwordVisibility(visible) {
 }
 function renderAuth() {
   $("name-field").hidden = !signingUp; $("name").required = signingUp; $("password-hint").hidden = !signingUp;
+  $("registration-code-field").hidden = !signingUp; $("registration-code").required = signingUp; $("registration-code").disabled = !signingUp;
+  if (!signingUp) $("registration-code").value = "";
   $("password").minLength = signingUp ? 12 : 1; $("password").autocomplete = signingUp ? "new-password" : "current-password";
   $("auth-title").textContent = t(signingUp ? "signupTitle" : "loginTitle"); $("auth-description").textContent = t(signingUp ? "signupDescription" : "loginDescription");
   $("login-button").textContent = t(signingUp ? "signup" : "login"); $("switch-label").textContent = t(signingUp ? "hasAccount" : "noAccount"); $("switch-auth").textContent = t(signingUp ? "login" : "signup");
@@ -86,7 +88,7 @@ $("login-form").addEventListener("submit", async event => {
   event.preventDefault(); const register = signingUp; $("login-button").disabled = true; $("switch-auth").disabled = true;
   notify(t(register ? "signupProgress" : "loginProgress"));
   try {
-    const response = await fetch(register ? "/register" : "/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: $("email").value, password: $("password").value, ...(register ? { name: $("name").value } : {}) }) });
+    const response = await fetch(register ? "/register" : "/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: $("email").value, password: $("password").value, ...(register ? { name: $("name").value, registrationCode: $("registration-code").value } : {}) }) });
     if (!response.ok) throw new Error(await failure(response));
     if (register) { $("password").value = ""; signingUp = false; passwordVisibility(false); renderAuth(); notify(t("signupDone")); $("password").focus(); return; }
     const data = await response.json(); token = data.token; user = data.user; current = undefined; passwordVisibility(false); $("password").value = "";
