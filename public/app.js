@@ -3,6 +3,9 @@ import { createWorkDetails, workStatus } from "./work-details.js";
 import { createProgressNotes } from "./progress-notes.js";
 import { createWorkspace } from "./workspace.js";
 import { createAiAssistant } from "./ai-assistant.js";
+import { initializeFormFeedback } from "./form-feedback.js";
+import { createConnectionStatus } from "./connection-status.js";
+import { preparePhoto } from "./photo-upload.js";
 import { t, locale, lang, apiError, initializeLanguage } from "./i18n.js";
 const $ = id => document.getElementById(id);
 let token = null, user = null, current, signingUp = false, shiftBusy = false, loading = false, exporting = false;
@@ -10,7 +13,7 @@ let page = 1, total = 0, applied = new URLSearchParams(), listVersion = 0, curre
 let session = new AbortController(), equipment = [], selectedEquipment = null, closingEntry = null, photoUrl = null;
 let board = { items: [], page: 1, total: 0 }, history = { items: [], page: 1, total: 0 }, shiftRows = [];
 let operationsVersion = 0, summary = null, summaryBusy = false;
-let selectedPhotos = [], interruptedDraft = null, entrySending = false;
+let selectedPhotos = [], interruptedDraft = null, entrySending = false, entryTask = null;
 let operationFilters = new URLSearchParams(), boardFilters = new URLSearchParams();
 const aiAssistant = createAiAssistant({ api, isSaving: () => entrySending });
 const dateFormats = new Map();
@@ -30,9 +33,23 @@ window.addEventListener("entry-work-open", event => workDetails.open(event.detai
 const progressNotes = createProgressNotes({ api, stamp, onSaved: refreshVisible });
 window.addEventListener("entry-updates-open", event => progressNotes.open(event.detail, { readOnly: true }));
 const workspace = createWorkspace({ authenticated: () => Boolean(token), stamp });
+const formFeedback = initializeFormFeedback();
+const connection = createConnectionStatus({ retry: async () => {
+  if (!token) return;
+  if (workspace.page === "new-record") await loadCurrent();
+  else await refreshVisible();
+} });
 function node(tag, text, className) { const el = document.createElement(tag); if (text !== undefined) el.textContent = text; if (className) el.className = className; return el; }
 function notify(message, error = false) { const el = token ? $("dashboard-message") : $("auth-message"); el.textContent = message; el.classList.toggle("error", error); }
 function showError(error) { if (error.name !== "AbortError") notify(error.message || t("failed"), true); }
+function entryMessage(message = "", error = false) { $("entry-message").textContent = message; $("entry-message").classList.toggle("error", error); }
+function finishEntry(task = entryTask) {
+  if (!task || entryTask !== task) return;
+  entryTask = null; entrySending = false;
+  task.controls.forEach(({ element, disabled }) => { element.disabled = disabled; });
+  $("entry-form").removeAttribute("aria-busy"); $("entry-save").textContent = t("save");
+  syncWorkFields(); aiAssistant.render();
+}
 async function failure(response) { try { return apiError((await response.json()).error) || t("failed"); } catch { return t("failed"); } }
 function releasePhoto() { if (photoUrl) URL.revokeObjectURL(photoUrl); photoUrl = null; $("entry-photo").removeAttribute("src"); }
 function logout({ preserveDraft = false } = {}) {
@@ -40,6 +57,7 @@ function logout({ preserveDraft = false } = {}) {
     values: Object.fromEntries(["entry-kind", "entry-priority", "entry-unit", "entry-title", "entry-description", "entry-work-status", "entry-work-team", "entry-work-next"].map(id => [id, $(id).value])),
     files: selectedPhotos.map(item => item.file), chat: aiAssistant.snapshot(), updates: progressNotes.snapshot(), work: workDetails.snapshot() };
   if (!preserveDraft) interruptedDraft = null;
+  finishEntry(); entryMessage(); connection.reset();
   aiAssistant.reset(); progressNotes.reset(); workDetails.reset(); workspace.reset();
   summary = null; renderSummary(); operationFilters = new URLSearchParams(); boardFilters = new URLSearchParams();
   session.abort(); session = new AbortController(); token = null; user = null; current = undefined; listVersion++; currentVersion++; operationsVersion++;
@@ -52,11 +70,12 @@ function logout({ preserveDraft = false } = {}) {
   $("auth-message").textContent = ""; $("dashboard-message").textContent = ""; $("email").focus();
 }
 async function api(path, options = {}) {
-  const identity = token;
+  const identity = token, observation = connection.begin(path, options.method);
   let response;
   try { response = await fetch(path, { ...options, signal: session.signal, headers: { "Accept-Language": lang(), ...options.headers, Authorization: `Bearer ${token}` } }); }
-  catch (error) { if (error.name === "AbortError") throw error; throw new Error(t("connection")); }
+  catch (error) { if (error.name === "AbortError") throw error; if (identity === token) observation.failed(); throw new Error(t("connection")); }
   if (identity !== token) throw new DOMException("Session changed", "AbortError");
+  observation.response(response.status);
   if (response.status === 401) { const unsaved = draftDirty() || aiAssistant.dirty() || progressNotes.dirty() || workDetails.dirty(); logout({ preserveDraft: true }); const message = t(unsaved ? "expiredDraft" : "expired"); notify(message, true); throw new Error(message); }
   if (!response.ok) {
     let code; try { code = (await response.clone().json()).error; } catch { /* Non-JSON gateway response. */ }
@@ -83,7 +102,7 @@ function renderAuth() {
 }
 $("toggle-password").addEventListener("click", () => passwordVisibility($("password").type === "password"));
 $("login-form").addEventListener("reset", () => passwordVisibility(false));
-$("switch-auth").addEventListener("click", () => { signingUp = !signingUp; passwordVisibility(false); renderAuth(); notify(""); });
+$("switch-auth").addEventListener("click", () => { signingUp = !signingUp; formFeedback.reset($("login-form")); passwordVisibility(false); renderAuth(); notify(""); });
 $("login-form").addEventListener("submit", async event => {
   event.preventDefault(); const register = signingUp; $("login-button").disabled = true; $("switch-auth").disabled = true;
   notify(t(register ? "signupProgress" : "loginProgress"));
@@ -91,7 +110,7 @@ $("login-form").addEventListener("submit", async event => {
     const response = await fetch(register ? "/register" : "/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: $("email").value, password: $("password").value, ...(register ? { name: $("name").value, registrationCode: $("registration-code").value } : {}) }) });
     if (!response.ok) throw new Error(await failure(response));
     if (register) { $("password").value = ""; signingUp = false; passwordVisibility(false); renderAuth(); notify(t("signupDone")); $("password").focus(); return; }
-    const data = await response.json(); token = data.token; user = data.user; current = undefined; passwordVisibility(false); $("password").value = "";
+    const data = await response.json(); token = data.token; user = data.user; current = undefined; connection.reset(); passwordVisibility(false); $("password").value = "";
     $("account-name").textContent = user.name; $("avatar").textContent = user.name.trim().split(/\s+/).slice(0, 2).map(n => n[0]).join("").toLocaleUpperCase(locale());
     $("scope-field").hidden = user.role !== "MANAGER"; $("auth-view").hidden = true; $("dashboard").hidden = false; $("dashboard-message").textContent = "";
     applied = new URLSearchParams(); page = 1; workspace.start(); renderIdentity(); renderCurrent();
@@ -299,16 +318,30 @@ $("equipment-form").addEventListener("submit", async event => {
 $("entry-form").addEventListener("submit", async event => {
   event.preventDefault();
   if (entrySending) return;
-  if (selectedPhotos.length > 3 || selectedPhotos.some(item => item.file.size > 5 * 1024 * 1024)) return notify(t("photoLimit"), true);
+  if (selectedPhotos.length > 3 || selectedPhotos.some(item => item.file.size > 5 * 1024 * 1024)) return entryMessage(t("photoLimit"), true);
   aiAssistant.beforeSave();
   syncWorkFields();
   const body = new FormData($("entry-form")); body.delete("photos");
-  selectedPhotos.forEach(item => body.append("photos", item.file));
   const controls = [...$("entry-form").querySelectorAll("input,select,textarea,button"), ...document.querySelectorAll("[data-quick-kind]")].map(element => ({ element, disabled: element.disabled }));
-  entrySending = true; aiAssistant.render(); controls.forEach(({ element }) => { element.disabled = true; }); $("entry-save").textContent = t("saveProgress");
-  try { await api("/operations/entries", { method: "POST", body }); $("entry-form").reset(); board.page = 1; history.page = 1; notify(t("entrySaved")); await loadOperations({ scope: workspace.page === "new-record" ? "overview" : workspace.page }); }
-  catch (error) { showError(error); }
-  finally { entrySending = false; controls.forEach(({ element, disabled }) => { element.disabled = disabled; }); $("entry-save").textContent = t("save"); syncWorkFields(); aiAssistant.render(); }
+  const task = { controls, identity: token, signal: session.signal }, files = selectedPhotos.map(item => item.file);
+  entryTask = task; entrySending = true; aiAssistant.render(); controls.forEach(({ element }) => { element.disabled = true; }); $("entry-save").textContent = t("saveProgress");
+  $("entry-form").setAttribute("aria-busy", "true"); entryMessage(t(files.length ? "photosPreparing" : "saveProgress"));
+  const active = () => entryTask === task && token === task.identity && !task.signal.aborted;
+  try {
+    // Process sequentially to keep peak memory low on phones.
+    for (const file of files) {
+      const prepared = await preparePhoto(file);
+      if (!active()) throw new DOMException("Session changed", "AbortError");
+      body.append("photos", prepared);
+    }
+    if (!active()) throw new DOMException("Session changed", "AbortError");
+    entryMessage(t("saveProgress"));
+    await api("/operations/entries", { method: "POST", body });
+    if (!active()) return;
+    $("entry-form").reset(); board.page = 1; history.page = 1; notify(t("entrySaved")); entryMessage(t("entrySaved"));
+    await loadOperations({ scope: workspace.page === "new-record" ? "overview" : workspace.page });
+  } catch (error) { if (active() && error.name !== "AbortError") { showError(error); entryMessage(error.message || t("failed"), true); } }
+  finally { finishEntry(task); }
 });
 $("close-form").addEventListener("submit", async event => {
   event.preventDefault(); const identity = token; $("close-save").disabled = true; $("close-message").textContent = "";
@@ -326,7 +359,7 @@ async function refreshLivePage() {
 }
 setInterval(refreshLivePage, 30000);
 document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") refreshLivePage(); });
-window.addEventListener("languagechange", () => { renderAuth(); notify(""); if (token) { renderIdentity(); renderCurrent(); renderRows(); renderSummary(); renderEquipment(); renderEntries(); renderPhotos(); } });
+window.addEventListener("languagechange", () => { renderAuth(); notify(""); entryMessage(entrySending ? t("saveProgress") : ""); if (token) { renderIdentity(); renderCurrent(); renderRows(); renderSummary(); renderEquipment(); renderEntries(); renderPhotos(); } });
 function renderSummary() {
   if (!summary) {
     for (const id of ["summary-units", "summary-counts", "summary-important", "summary-recent"]) $(id).replaceChildren();
@@ -363,14 +396,14 @@ function renderPhotos() {
 }
 function addPhotos(files) {
   if (entrySending) return;
-  if (selectedPhotos.length + files.length > 3 || files.some(file => file.size > 5 * 1024 * 1024)) { notify(t("photoLimit"), true); return; }
+  if (selectedPhotos.length + files.length > 3 || files.some(file => file.size > 5 * 1024 * 1024)) { notify(t("photoLimit"), true); entryMessage(t("photoLimit"), true); return; }
   for (const file of files) selectedPhotos.push({ file, url: URL.createObjectURL(file) });
   renderPhotos();
 }
 for (const id of ["entry-photos", "camera-photo"]) $(id).addEventListener("change", event => { addPhotos([...event.target.files]); event.target.value = ""; });
 $("choose-photos").addEventListener("click", () => $("entry-photos").click());
 $("take-photo").addEventListener("click", () => $("camera-photo").click());
-$("entry-form").addEventListener("input", () => { $("draft-hint").hidden = !draftDirty(); });
+$("entry-form").addEventListener("input", () => { $("draft-hint").hidden = !draftDirty(); if (!entrySending) entryMessage(); });
 $("entry-form").addEventListener("reset", () => { selectedPhotos.forEach(item => URL.revokeObjectURL(item.url)); selectedPhotos = []; queueMicrotask(() => { renderPhotos(); syncWorkFields(); }); });
 window.addEventListener("beforeunload", event => { if (draftDirty() || aiAssistant.dirty() || progressNotes.dirty() || workDetails.dirty() || interruptedDraft) { event.preventDefault(); event.returnValue = ""; } });
 document.querySelectorAll("[data-quick-kind]").forEach(button => button.addEventListener("click", () => {
