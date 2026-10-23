@@ -1,5 +1,7 @@
 # Shift Handover System
 
+[![CI](https://github.com/AtaK123456/shift-handover-system/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/AtaK123456/shift-handover-system/actions/workflows/ci.yml)
+
 A shift tracking and plant handover application built with Express 5, TypeScript,
 Prisma 7.10.1, and PostgreSQL. The browser interface supports Turkish and English.
 
