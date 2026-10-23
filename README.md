@@ -61,6 +61,24 @@ Do not accept an unrelated Prisma version offered by `npx` after a failed instal
 After installation succeeds, `.\node_modules\.bin\prisma.cmd migrate deploy`
 explicitly uses the project's local CLI in PowerShell.
 
+## Browser feedback and uploads
+
+Forms retain native browser validation and add Turkish/English errors beside the
+affected fields. New-entry progress, errors and confirmation also appear beside
+the save button; failed requests keep the draft and original photo selections.
+
+Every workspace page shows connection status and the last server response time.
+This time describes server contact, not the freshness of every displayed record.
+Network failures and failed data reads show a warning. Reconnecting or pressing
+Retry performs reads only; drafts are never submitted automatically. Existing
+overview freshness indicators and background-refresh limits remain in place.
+
+Before upload, supported browsers resize oversized JPEG, PNG and WebP images to
+a maximum side of 1,600 pixels, using the smaller result only. PNG/WebP transparency
+is retained. Unsupported decoding/encoding falls back to the original file; the
+server still validates, rotates, resizes and strips metadata. The existing limit
+of three photos, each up to 5 MB, is unchanged. No additional library is loaded.
+
 ## Security behavior
 
 - `/register` is closed with HTTP `403` unless `REGISTRATION_CODE` is configured.
