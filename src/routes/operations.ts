@@ -15,7 +15,7 @@ const entrySelect = { ...workSelect, id: true, kind: true, priority: true, title
   photos: { select: { id: true } } } as const;
 const boardKinds: EntryKind[] = [EntryKind.VALVE, EntryKind.ATTENTION, EntryKind.TASK];
 function text(value: unknown, min: number, max: number) {
-  if (typeof value !== "string" || value.trim().length < min || value.length > max) throw new RequestError("Metin alanlarını kontrol edin.", 400);
+  if (typeof value !== "string" || value.trim().length < min || value.length > max || value.includes("\0")) throw new RequestError("Metin alanlarını kontrol edin.", 400);
   return value.trim();
 }
 function id(value: unknown) {

@@ -71,6 +71,14 @@ test('invalid credentials fail before database processing', async () => {
   assert.equal(createCalls(), 0);
   noRegistrationCode(res);
 });
+test('NUL credentials fail validation without database access', async () => {
+  const { app, createCalls } = setup(null, true, registrationCode);
+  await request(app).post('/login').send({ email: 'nul\0@example.invalid', password: 'long-password-123' }).expect(400);
+  const body = { email: 'nul@example.invalid', name: 'Operator', password: 'long-password-123', registrationCode };
+  await request(app).post('/register').send({ ...body, email: 'nul\0@example.invalid' }).expect(400);
+  await request(app).post('/register').send({ ...body, name: 'Operator\0' }).expect(400);
+  assert.equal(createCalls(), 0);
+});
 test('registration hashes passwords, forces WORKER and omits secrets', async () => {
   const { app, created, createCalls } = setup(undefined, false, registrationCode);
   const res = await request(app).post('/register').send({ email: 'a@b.com', name: ' A ', password: 'long-password-123', role: 'MANAGER', registrationCode }).expect(201);

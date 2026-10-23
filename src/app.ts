@@ -19,11 +19,11 @@ import { hashPassword, verifyPassword } from "./password.js";
 function credentials(body: unknown, registration = false) {
   if (!body || typeof body !== "object" || Array.isArray(body)) return null;
   const { email, password, name } = body as Record<string, unknown>;
-  if (typeof email !== "string" || email.length > 254 ||
+  if (typeof email !== "string" || email.length > 254 || email.includes("\0") ||
       !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ||
       typeof password !== "string" || password.length === 0 || Buffer.byteLength(password) > 256) return null;
   if (registration && (password.length < 12 || typeof name !== "string" ||
-      name.trim().length === 0 || name.length > 100)) return null;
+      name.trim().length === 0 || name.length > 100 || name.includes("\0"))) return null;
   return { email, password, name: typeof name === "string" ? name.trim() : "" };
 }
 

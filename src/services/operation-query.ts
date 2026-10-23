@@ -10,7 +10,7 @@ export function operationQuery(query: Request["query"]) {
   if (view === "open") conditions.push({ closedAt: null, kind: { in: [EntryKind.VALVE, EntryKind.ATTENTION, EntryKind.TASK] } });
   if (view === "history") conditions.push({ OR: [{ kind: { in: [EntryKind.EVENT, EntryKind.NOTE] } }, { closedAt: { not: null } }] });
   if (q !== undefined) {
-    if (typeof q !== "string" || q.length > 160) throw invalid();
+    if (typeof q !== "string" || q.length > 160 || q.includes("\0")) throw invalid();
     if (q.trim()) {
       const search = q.trim().replace(/[\\%_]/g, "\\$&");
       conditions.push({ OR: ["title", "description", "closeNote"].map(field => ({ [field]: { contains: search, mode: "insensitive" } })) });

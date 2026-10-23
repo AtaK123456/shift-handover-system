@@ -81,6 +81,10 @@ of three photos, each up to 5 MB, is unchanged. No additional library is loaded.
 
 ## Security behavior
 
+See the [2026-10-24 security assessment](docs/reviews/2026-10-24-security-assessment.md)
+for the tested boundaries, corrected input-validation defect and remaining
+session/deployment limitations. It is a local assessment, not a security certification.
+
 - `/register` is closed with HTTP `403` unless `REGISTRATION_CODE` is configured.
   When enabled, it requires the exact code in the `registrationCode` field
   (at most 128 characters) before credentials are processed or the database is
