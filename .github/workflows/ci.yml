@@ -106,7 +106,7 @@ jobs:
           for spec in tests/e2e/*.spec.ts; do
             suite="$(basename "$spec" .spec.ts)"
             if ! PLAYWRIGHT_HTML_OUTPUT_DIR="playwright-report/$suite" \
-              npm run test:e2e -- "$spec" --reporter=list,html --output="test-results/$suite"; then
+              npm run test:e2e -- "$spec" --config=.github/playwright.config.ts --reporter=list,html --output="test-results/$suite"; then
               failed=1
             fi
           done
