@@ -97,8 +97,20 @@ jobs:
       - run: npx prisma migrate deploy
       - run: npm run build
       - run: npx playwright install --with-deps chromium
-      # Override the list-only reporter without changing playwright.config.ts.
-      - run: npm run test:e2e -- --reporter=list,html
+      - name: Run browser suites with isolated servers
+        shell: bash
+        # Each Playwright invocation starts a fresh server so unrelated suites
+        # do not exhaust the production per-IP login limit. Keep every report.
+        run: |
+          failed=0
+          for spec in tests/e2e/*.spec.ts; do
+            suite="$(basename "$spec" .spec.ts)"
+            if ! PLAYWRIGHT_HTML_OUTPUT_DIR="playwright-report/$suite" \
+              npm run test:e2e -- "$spec" --config=.github/playwright.config.ts --reporter=list,html --output="test-results/$suite"; then
+              failed=1
+            fi
+          done
+          exit "$failed"
       - name: Upload Playwright failure report
         if: ${{ failure() }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
