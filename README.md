@@ -22,6 +22,19 @@ Set your PostgreSQL connection string as `DATABASE_URL` in `.env`, and set
 node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"
 ```
 
+Registration is closed by default (`REGISTRATION_CODE=""`). To allow your team
+to create accounts, generate a separate registration code and set it in `.env`:
+
+```sh
+node -e "console.log(require('crypto').randomBytes(24).toString('hex'))"
+```
+
+Use 12–128 characters and share the code privately with your team. A blank or
+whitespace-only value closes registration; other values outside that range stop
+startup with a configuration error. Restart the server after changing the value.
+Rotating the code affects new registrations only; existing accounts can still
+sign in. Never commit the generated code or use your JWT secret as this code.
+
 Then run each command in order, continuing only when the previous command succeeds:
 
 ```sh
@@ -50,7 +63,13 @@ explicitly uses the project's local CLI in PowerShell.
 
 ## Security behavior
 
-- `/register` requires a valid email address, a name of 1–100 characters, and a
+- `/register` is closed with HTTP `403` unless `REGISTRATION_CODE` is configured.
+  When enabled, it requires the exact code in the `registrationCode` field
+  (at most 128 characters) before credentials are processed or the database is
+  accessed. Missing, incorrect and oversized codes receive the same generic
+  `403` response. SHA-256 digests are compared with `timingSafeEqual`; the code
+  is never logged, stored in the user record or returned in API responses.
+- Registration also requires a valid email address, a name of 1–100 characters, and a
   password of at least 12 characters and at most 256 bytes. It only creates
   `WORKER` accounts. Existing accounts with shorter passwords can still log in.
 - `/login` and `/register` allow 20 and 10 requests per IP address per 15 minutes,
@@ -72,8 +91,9 @@ explicitly uses the project's local CLI in PowerShell.
 - Rate limits currently use process memory. Use a shared store for multiple
   application instances. Configure `trust proxy` only for the actual reverse
   proxy topology; do not blindly trust client IP headers.
-- Public registration remains available. Invitations, approval, and email
-  verification have not been implemented.
+- Registration uses a shared team code. Individual invitations, approval, and
+  email verification have not been implemented. Anyone holding the code can
+  create an account, so rotate it if it is disclosed outside the team.
 - Logout and password changes do not yet revoke issued tokens; tokens expire
   after 8 hours.
 - Concurrent `/shifts/start` requests for the same user can create only one
@@ -164,6 +184,8 @@ npm run test:e2e
 ```
 
 Optionally set `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` to a system Chromium binary.
+The browser-test server uses a shared test-only registration fixture from
+`tests/e2e/registration-code.ts`; it does not use your real registration code.
 Tests start and stop their own local server; port 3000 must be available.
 They cover authentication, shift actions, filtering, real Excel downloads,
 manager access, mobile overflow, themes, photos, handover acknowledgments,
@@ -171,7 +193,8 @@ unsaved changes, and account-specific draft restoration.
 
 ## Web interface and Excel
 
-- Log in or create an account. New accounts have the `WORKER` role.
+- Log in with an existing account, or create one with the team's registration
+  code when registration is enabled. New accounts have the `WORKER` role.
 - Start or end a shift from the top card. Actual start and end times are recorded.
 - Choose dates in shift history and press **Apply**.
 - **Export to Excel** downloads every record matching the applied filters,

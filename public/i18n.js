@@ -1,4 +1,6 @@
 const messages = {
+  registrationCode:["Kayıt kodu", "Registration code"],
+  registrationCodeHint:["Ekip sorumlusundan aldığın kodu gir.", "Enter the code provided by your team lead."],
   workDetails:["İş takibi", "Work tracking"],
   workTitle:["İş takibi · {title}", "Work tracking · {title}"],
   workStatusLabel:["İş durumu", "Work status"],
@@ -174,6 +176,8 @@ const messages = {
   loginProgress:["Giriş yapılıyor…","Signing in…"],signupProgress:["Hesabın oluşturuluyor…","Creating your account…"],signupDone:["Hesabın oluşturuldu. Şimdi giriş yapabilirsin.","Account created. You can now sign in."],signedOut:["Çıkış yapıldı.","Signed out."],connection:["Sunucuya ulaşılamadı. Bağlantını kontrol edip tekrar dene.","Unable to reach the server. Check your connection and try again."],expired:["Oturumun sona erdi. Lütfen tekrar giriş yap.","Your session expired. Please sign in again."],failed:["İşlem tamamlanamadı. Tekrar dene.","The request could not be completed. Please try again."],applyFirst:["Seçtiğin filtreyi görmek ve Excel’e aktarmak için Uygula’ya bas.","Select Apply to view and export the chosen filters."],invalidRange:["Bitiş tarihi başlangıçtan önce olamaz.","End date cannot be before start date."],historyFailed:["Kayıtlar yüklenemedi. Uygula ile tekrar dene.","Records could not be loaded. Select Apply to retry."],exporting:["Excel dosyan hazırlanıyor…","Preparing your Excel file…"],exportReady:["Excel dosyan hazır. İndirme başlatıldı.","Your Excel file is ready. Download started."],photoLimit:["En fazla 3 fotoğraf, fotoğraf başına en fazla 5 MB yükleyin.","Upload up to 3 photos, maximum 5 MB per photo."],saveProgress:["Kaydediliyor…","Saving…"]
 };
 const errors = {
+  "Kayıt kapalı.":"Registration is closed. Contact your team lead.",
+  "Kayıt yapılamadı. Bilgileri kontrol edin veya ekip sorumlusuyla iletişime geçin.":"Unable to register. Check your details or contact your team lead.",
   "Geçersiz filtre parametresi.":"Invalid search filters.",
   "Geçersiz özet sürümü.":"Invalid overview revision.",
   "Devir özeti değişti. Güncel özeti inceleyip tekrar onaylayın.":"The overview changed. Review the latest overview and acknowledge it again.",

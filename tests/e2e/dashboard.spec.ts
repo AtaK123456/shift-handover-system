@@ -4,6 +4,7 @@ import { randomUUID } from "node:crypto";
 import ExcelJS from "exceljs";
 import { createPrismaClient } from "../../src/database.js";
 import { hashPassword } from "../../src/password.js";
+import { registrationCode } from "./registration-code.js";
 const db = createPrismaClient(process.env.TEST_DATABASE_URL);
 const password = "test-password-12345";
 const suffix = randomUUID();
@@ -89,15 +90,40 @@ test("mobile layout and logout", async ({ page }) => {
   await expect(page.getByLabel("Şifre", { exact: true })).toHaveValue("");
 });
 test("registration creates a worker who can sign in", async ({ page }) => {
+  await page.route("**/register", async route => {
+    // Inspect the real upstream body before forwarding it to the browser.
+    // The signup UI intentionally does not consume a successful response body.
+    const response = await route.fetch();
+    expect(await response.text()).not.toContain(registrationCode);
+    expect(await response.json()).not.toHaveProperty("password");
+    await route.fulfill({ response });
+  });
   await page.goto("/app/");
+  await expect(page.locator("#registration-code-field")).toBeHidden();
   await page.getByRole("button", { name: "Hesap oluştur", exact: true }).click();
   await page.getByLabel("Ad soyad").fill("Yeni Kullanıcı");
   await page.getByLabel("E-posta adresi").fill(registrationEmail);
   await page.getByLabel("Şifre", { exact: true }).fill(password);
+  await expect(page.getByLabel("Kayıt kodu", { exact: true })).toHaveAttribute("type", "password");
+  await expect(page.locator("#registration-code")).toHaveAttribute("autocomplete", "off");
+  await page.locator("#registration-code").fill("wrong-browser-test-code");
+  const rejected = page.waitForResponse(r => r.url().endsWith("/register"));
   await page.locator("#login-button").click();
+  expect((await rejected).status()).toBe(403);
+  await expect(page.locator("#auth-message")).toContainText("Kayıt yapılamadı.");
+  expect(await db.user.count({ where: { email: registrationEmail } })).toBe(0);
+  await page.locator("#registration-code").fill(registrationCode);
+  const registered = page.waitForResponse(r => r.url().endsWith("/register"));
+  await page.locator("#login-button").click();
+  const response = await registered;
+  expect(response.status()).toBe(201);
   await expect(page.getByText("Hesabın oluşturuldu. Şimdi giriş yapabilirsin.")).toBeVisible();
+  await expect(page.locator("#registration-code-field")).toBeHidden();
+  await expect(page.locator("#registration-code")).toHaveValue("");
   await page.getByLabel("Şifre", { exact: true }).fill(password);
+  const loginRequest = page.waitForRequest(r => r.url().endsWith("/login"));
   await page.getByRole("button", { name: /Giriş yap/ }).click();
+  expect((await loginRequest).postDataJSON()).not.toHaveProperty("registrationCode");
   await expect(page.locator("#greeting")).toBeVisible();
   await expect(page.locator("#scope-field")).toBeHidden();
 });
